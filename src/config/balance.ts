@@ -168,3 +168,28 @@ export const WEAPON_STATS = {
 } satisfies Record<string, WeaponStats>;
 
 export type WeaponId = keyof typeof WEAPON_STATS;
+
+// ---- FEATURE F: menu e PWA ----
+
+/** Menu iniziale e impostazioni (animazioni a scatti, vibrazione). */
+export const MENU = {
+  /** durata di un frame dell'animazione del titolo */
+  titleFrameMs: 110,
+  /** ogni quanti frame del titolo cambia la combinazione di colori */
+  titleColorEvery: 6,
+  /** pixel di salto della lettera attiva (le vicine saltano di 1) */
+  titleJumpPx: 2,
+  /** scala dei glifi del titolo (font 5x7 ingrandito, contorno sempre 1px) */
+  titleScale: 3,
+  /** altalena di Tony: durata di un frame e passo della rotazione */
+  swingFrameMs: 130,
+  swingStepDeg: 4,
+  /** posizioni per lato (±swingSteps * swingStepDeg) */
+  swingSteps: 2,
+  /** frame per un'oscillazione completa */
+  swingPeriodFrames: 12,
+  /** lunghezza delle corde dell'altalena (px) */
+  swingRope: 96,
+  /** vibrazione sui colpi forti (ms) */
+  vibrateMs: 30,
+} as const;
