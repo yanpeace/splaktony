@@ -366,3 +366,50 @@ export const EXPLOSIVES = {
   fuseLength: 4,
   sparkEveryMs: 45,
 } as const;
+
+// ---- FEATURE D: negozio ----
+
+/**
+ * Negozio e potenziamenti (vedi systems/upgrades.ts e scenes/Shop.ts).
+ *
+ * Obiettivo: un acquisto (arma o potenziamento) ogni 2-3 minuti di gioco.
+ * Reddito misurato col solo Pugno (simulazione nel browser): 4 tap/s su
+ * Tony ≈ 2800 danni/min (55% pugno, 45% urti) ≈ 280 monete/min; un lancio
+ * ogni 2,5 s ≈ 170 danni a lancio ≈ 400 monete/min. Un giocatore vero, con
+ * pause e tocchi a vuoto, fa circa 200 monete/min. Ogni arma nuova dovrebbe
+ * aumentare il reddito di ~1,7 volte, quindi i prezzi crescono di ~2 volte
+ * per gradino; i potenziamenti riempiono i buchi tra un'arma e l'altra.
+ * Simulazione "compra la cosa più economica": acquisto medio ogni ~2 min.
+ */
+export const SHOP = {
+  /**
+   * Prezzo per id, usato se WEAPON_STATS[id].price non è > 0.
+   * L'ordine è quello di "potenza" attesa delle armi.
+   */
+  prices: {
+    shuriken: 500,
+    coltello: 1100,
+    pistola: 2200,
+    mitragliatrice: 4500,
+    granata: 9000,
+    dinamite: 18000,
+  } as Record<string, number>,
+  /** prezzo per un'arma senza price e non presente in `prices` */
+  defaultPrice: 1500,
+  /** livelli di potenziamento per arma (0 = base) */
+  maxLevel: 5,
+  /** moltiplicatore del danno per livello 0..maxLevel */
+  damageMult: [1, 1.25, 1.5, 1.8, 2.15, 2.6],
+  /** moltiplicatore della cadenza per livello: cooldownMs / valore */
+  rateMult: [1, 1.1, 1.2, 1.3, 1.45, 1.6],
+  /** costo del primo potenziamento = prezzo arma * upgradeShare ... */
+  upgradeShare: 0.35,
+  /** ... ma mai meno di così (il Pugno costa 0): Pugno 300/480/770/1230/1970 */
+  upgradeMinBase: 300,
+  /** ogni livello costa upgradeGrowth volte il precedente */
+  upgradeGrowth: 1.6,
+  /** i costi si arrotondano a multipli di questo */
+  priceStep: 10,
+  /** durata del messaggio "monete insufficienti" (ms) */
+  toastMs: 1300,
+} as const;

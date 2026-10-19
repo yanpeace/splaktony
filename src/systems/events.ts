@@ -49,6 +49,10 @@ export interface GameEvents {
   'weapon:selected': { weaponId: string; name: string; iconKey: string };
   /** richiesta di cambiare arma (da negozio/barra armi) → Game la seleziona */
   'weapon:request': { weaponId: string };
+  /** arma comprata nel negozio. Emesso da systems/economy.ts */
+  'weapon:bought': { weaponId: string; price: number };
+  /** arma potenziata (level 1..SHOP.maxLevel). Emesso da systems/economy.ts → Game aggiorna weapon.level */
+  'weapon:upgraded': { weaponId: string; level: number; cost: number };
   /** livello salito (sistema livelli: da implementare) */
   'level:up': { level: number };
   /** espressione di Tony cambiata. Emesso da entities/Ragdoll.ts */

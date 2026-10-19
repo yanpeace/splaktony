@@ -5,6 +5,7 @@ import { formatCompact, pixelText, setPixelText } from '../gfx/pixelFont';
 import { ArcadeButton, drawPanel } from '../gfx/ui';
 import { events, Subscriptions } from '../systems/events';
 import { getSave } from '../systems/save';
+import { alignButtonHit } from './Shop';
 
 /**
  * HUD sovrapposto alla scena di gioco (scena separata, non trema con lo shake).
@@ -45,6 +46,21 @@ export class UI extends Phaser.Scene {
     drawPanel(g, 3, wy, 70, 15);
     const weaponIcon = this.add.image(5, wy + 3, '__DEFAULT').setOrigin(0).setVisible(false);
     const weaponName = pixelText(this, 17, wy + 3, '', C.white);
+
+    // --- negozio (in basso a destra): lancia la scena Shop sopra l'HUD
+    const shopLabel = pixelText(this, 0, 0, 'NEGOZIO', C.white);
+    shopLabel.setPosition(-Math.floor(shopLabel.width / 2), -4);
+    alignButtonHit(
+      new ArcadeButton(this, SCREEN.width - 3 - 60, wy, {
+        w: 60,
+        h: 15,
+        fill: C.red,
+        content: this.add.container(0, 0, [shopLabel]),
+        onClick: () => {
+          if (!this.scene.isActive('Shop')) this.scene.launch('Shop');
+        },
+      }),
+    );
 
     // --- suggerimento iniziale lampeggiante
     const hint = pixelText(this, SCREEN.width / 2, 250, 'TOCCA TONY!', C.yellow).setOrigin(0.5, 0);

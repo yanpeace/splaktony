@@ -3,6 +3,7 @@ import { PHYSICS, SCREEN } from './config/balance';
 import { hex, C } from './config/palette';
 import { Boot } from './scenes/Boot';
 import { Game } from './scenes/Game';
+import { Shop } from './scenes/Shop';
 import { UI } from './scenes/UI';
 
 const game = new Phaser.Game({
@@ -31,7 +32,7 @@ const game = new Phaser.Game({
       debug: false,
     },
   },
-  scene: [Boot, Game, UI],
+  scene: [Boot, Game, UI, Shop],
 });
 
 // utile per il debug da console: window.game
