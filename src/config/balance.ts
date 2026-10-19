@@ -165,6 +165,62 @@ export const WEAPON_STATS = {
     /** quota d'impulso data alle altre parti */
     bodyShare: 0.35,
   },
+  // ---- FEATURE A: armi da lancio ----
+  shuriken: {
+    price: 60,
+    damage: 3,
+    cooldownMs: 140,
+    /** velocità di volo (px/step) */
+    speed: 9,
+    /** Δv impresso alla parte colpita nella direzione di volo (px/step) */
+    impulse: 4,
+    /** quanto resta conficcato prima di staccarsi */
+    stickMs: 3000,
+  },
+  coltello: {
+    price: 150,
+    damage: 9,
+    cooldownMs: 420,
+    speed: 6,
+    impulse: 6.5,
+    stickMs: 3000,
+  },
 } satisfies Record<string, WeaponStats>;
+
+// ---- FEATURE A: armi da lancio ----
+/** Costanti comuni dei proiettili lanciati (shuriken, coltello). */
+export const THROWN = {
+  /** distanza dal muro del punto di lancio (angolo in basso) */
+  originInset: 6,
+  /** altezza del punto di lancio sopra il pavimento */
+  originAboveFloor: 4,
+  /** componente minima verso l'alto della direzione di lancio (0..1) */
+  minUpward: 0.15,
+  /** passo massimo (px) del controllo collisioni lungo il tragitto */
+  subStepPx: 2,
+  /** tolleranza (px) di partAt per il proiettile */
+  hitTolerance: 1,
+  /** di quanto (px) il proiettile entra nella parte colpita */
+  embedPx: 2,
+  /** quanto resta piantato nel muro/soffitto prima di cadere */
+  wallStickMs: 700,
+  /** gravità della caduta dopo il distacco (px/step²) */
+  fallGravity: 0.25,
+  /** velocità massima ereditata dalla parte al distacco (px/step) */
+  fallMaxSpeed: 4,
+  /** rotazione durante la caduta (rad/step) */
+  fallSpin: 0.18,
+  /** rimbalzo sui muri durante la caduta */
+  fallWallBounce: 0.3,
+  /** lampeggio a terra prima di sparire */
+  blinkMs: 700,
+  blinkFlashMs: 70,
+  /** cambio frame della rotazione a scatti dello shuriken in volo */
+  spinFrameMs: 45,
+  /** proiettili presenti al massimo (i più vecchi spariscono) */
+  maxProjectiles: 16,
+  /** sicurezza: volo massimo prima di cadere comunque */
+  maxFlightMs: 2500,
+} as const;
 
 export type WeaponId = keyof typeof WEAPON_STATS;
