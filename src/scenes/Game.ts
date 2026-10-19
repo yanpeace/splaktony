@@ -8,6 +8,7 @@ import { dealDamage } from '../systems/damage';
 import { events, Subscriptions } from '../systems/events';
 import { bindHitFeedback } from '../systems/feedback';
 import { getSave } from '../systems/save';
+import { installUpgrades } from '../systems/upgrades';
 import { WEAPON_REGISTRY } from '../weapons/registry';
 import type { Weapon, WeaponContext, WeaponPointer } from '../weapons/Weapon';
 
@@ -45,8 +46,16 @@ export class Game extends Phaser.Scene {
     this.ragdoll = new Ragdoll(this);
 
     const ctx: WeaponContext = { scene: this, ragdoll: this.ragdoll, dealDamage };
-    for (const entry of WEAPON_REGISTRY) this.weapons.set(entry.id, entry.create(ctx));
+    for (const entry of WEAPON_REGISTRY) {
+      const w = entry.create(ctx);
+      installUpgrades(w, getSave().weaponLevels[entry.id] ?? 0); // negozio: livello di potenziamento
+      this.weapons.set(entry.id, w);
+    }
     this.selectWeapon(getSave().selectedWeapon);
+    this.subs.on('weapon:upgraded', (e) => {
+      const w = this.weapons.get(e.weaponId);
+      if (w) installUpgrades(w, e.level);
+    });
 
     const feedback = bindHitFeedback(this);
     this.subs.add(() => feedback.clear());

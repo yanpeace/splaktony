@@ -72,11 +72,13 @@ src/
     damage.ts           dealDamage(), impactDamage(): unica fonte di 'damage'
     economy.ts          danno → monete, spend/add/canAfford
     save.ts             localStorage versionato: load/save/getSave/patchSave
+    upgrades.ts         prezzi, costi e scaleStats dei potenziamenti (puro)
     feedback.ts         numeri, particelle, shake, hit-stop e suoni sui colpi
   scenes/
     Boot.ts             genera texture/font, init save + economy, avvia Game
     Game.ts             stanza, Tony, fisica a passo fisso, input → arma
     UI.ts               HUD sovrapposto (scena separata, non trema)
+    Shop.ts             negozio armi + potenziamenti (sopra UI)
 ```
 
 Ordine scene: `Boot` → `Game` → (`Game` lancia) `UI` in parallelo.
@@ -104,6 +106,8 @@ events.peek('coins:changed');                     // ultimo payload, senza iscri
 | `damage:total` | `{ total }` | `economy` | danno cumulativo |
 | `weapon:selected` | `{ weaponId, name, iconKey }` | `Game.selectWeapon` | il save lo memorizza |
 | `weapon:request` | `{ weaponId }` | negozio / barra armi | `Game` seleziona l'arma |
+| `weapon:bought` | `{ weaponId, price }` | `economy.buyWeapon` | arma aggiunta a `ownedWeapons` |
+| `weapon:upgraded` | `{ weaponId, level, cost }` | `economy.upgradeWeapon` | `Game` aggiorna `weapon.level` |
 | `level:up` | `{ level }` | sistema livelli (da fare) | il save salva `level` |
 | `mood:changed` | `{ mood: 'normal' \| 'hurt' \| 'dizzy' }` | `Ragdoll` | |
 | `ragdoll:grab` | `{ part }` | `Ragdoll` | |
@@ -269,9 +273,25 @@ gambe 6x11 + 6x12 (2 pezzi).
 
 ---
 
+### Negozio e potenziamenti
+
+- `scenes/Shop.ts`: scena sovrapposta (pulsante NEGOZIO dell'HUD), lista da
+  `WEAPON_REGISTRY` a pagine da 6. Per nome/icona istanzia ogni arma con un
+  `WeaponContext` inerte (solo `scene.textures` è reale): **i costruttori delle
+  armi non devono fare lavoro importante**, mettilo in `activate()`.
+- `systems/upgrades.ts` (puro): `weaponPrice(id)` (`WEAPON_STATS[id].price` se
+  > 0, altrimenti `SHOP.prices[id]`), `upgradeCost(id, livello)`,
+  `scaleStats(base, livello)` (danno * `SHOP.damageMult`, cooldown /
+  `SHOP.rateMult`), `installUpgrades(arma, livello)`: la usa `Game` per ogni
+  arma; se l'arma ha un suo override di `statsForLevel` viene rispettato.
+- `economy.buyWeapon(id)` / `economy.upgradeWeapon(id)`: spendono, salvano
+  subito ed emettono `weapon:bought` / `weapon:upgraded`.
+- Il save garantisce sempre `punch` in `ownedWeapons` e una `selectedWeapon`
+  posseduta.
+
 ## 10. Cosa NON c'è ancora (per i prossimi agenti)
 
-- Altre armi, negozio, potenziamenti (`Weapon.level` + `statsForLevel`).
+- Altre armi.
 - Livelli/XP (`level:up`, campi `level`/`xp` già nel save).
 - Barra di selezione armi (il riquadro arma in basso a sinistra dell'HUD
   mostra già l'arma attiva da `weapon:selected`).

@@ -62,7 +62,25 @@ function migrate(raw: AnySave): SaveData {
   }
   // i campi mancanti prendono il default (robusto a salvataggi parziali)
   const def = defaultSave();
-  return { ...def, ...(d as Partial<SaveData>), settings: { ...def.settings, ...(d.settings as object) } } as SaveData;
+  const out = { ...def, ...(d as Partial<SaveData>), settings: { ...def.settings, ...(d.settings as object) } } as SaveData;
+  return ensureStarterWeapon(out);
+}
+
+/**
+ * Il Pugno è gratis e sempre posseduto (anche nei salvataggi vecchi o
+ * manomessi); ownedWeapons / weaponLevels sempre ben formati.
+ */
+function ensureStarterWeapon(s: SaveData): SaveData {
+  const owned = Array.isArray(s.ownedWeapons) ? s.ownedWeapons.filter((w) => typeof w === 'string') : [];
+  if (!owned.includes('punch')) owned.unshift('punch');
+  const levels: Record<string, number> = {};
+  const raw = s.weaponLevels && typeof s.weaponLevels === 'object' ? s.weaponLevels : {};
+  for (const [id, lv] of Object.entries(raw)) {
+    if (typeof lv === 'number' && Number.isFinite(lv)) levels[id] = Math.max(0, Math.floor(lv));
+  }
+  levels.punch ??= 0;
+  const selectedWeapon = owned.includes(s.selectedWeapon) ? s.selectedWeapon : 'punch';
+  return { ...s, ownedWeapons: [...new Set(owned)], weaponLevels: levels, selectedWeapon };
 }
 
 export function load(): SaveData {
