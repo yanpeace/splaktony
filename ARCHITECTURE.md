@@ -1,0 +1,277 @@
+# Splak Tony: architettura e contratti
+
+Leggi questo file prima di toccare il codice. Descrive le regole che tengono
+insieme il progetto quando ci lavorano più agenti.
+
+Gioco: il giocatore colpisce **Tony**, un pupazzo di pezza ragdoll.
+Core loop: colpisci → danno → monete → armi migliori → più danno.
+
+Stack: Vite + TypeScript (strict) + Phaser 3.90 con Matter.js.
+
+```
+npm install
+npm run dev -- --host     # dev server, raggiungibile dal telefono in LAN
+npm run typecheck         # tsc, deve restare a 0 errori
+npm run build
+```
+
+---
+
+## 1. Regole vincolanti
+
+1. **Risoluzione logica 180x320** (verticale), `pixelArt`, `roundPixels`,
+   `Scale.FIT`. Posizioni a schermo sempre intere (`Math.round`).
+2. **Solo la palette Sweetie 16** (`src/config/palette.ts`). Nel codice usa
+   `C.<nome>` + `col()` (intero) o `hex()` (CSS). Mai colori letterali.
+3. **Niente asset esterni**: sprite da stringhe (`gfx/pixelSprite.ts`), font
+   da codice (`gfx/pixelFont.ts`), audio Web Audio (`audio/sfx.ts`).
+4. **Tutti i numeri di gameplay stanno in `src/config/balance.ts`**:
+   danni, prezzi, soglie, durate, fisica. Niente numeri magici nei sistemi.
+5. **I sistemi comunicano solo tramite eventi** (`systems/events.ts`).
+   Non importare un sistema dentro un altro per chiamarne i metodi; emetti o
+   ascolta un evento. Eccezioni ammesse: le utility pure (`gfx/*`,
+   `audio/sfx`, `systems/damage.dealDamage`, `save.getSave/patchSave`).
+6. Ogni `events.on(...)` di una scena va chiuso allo shutdown: usa
+   `Subscriptions` e chiama `subs.clear()` su `Phaser.Scenes.Events.SHUTDOWN`.
+7. Testo: solo con `pixelText()` (contorno scuro di 1px incluso). Il font ha
+   maiuscole, cifre e `. , ! ? : - + / % ' ( ) = < > # $ *`; minuscole e
+   accenti vengono convertiti, gli altri caratteri diventano spazi.
+   `*` è una "x" piccola per i moltiplicatori (`*2`).
+
+---
+
+## 2. Struttura cartelle
+
+```
+src/
+  main.ts               config Phaser (WebGL, matter, autoUpdate: false)
+  config/
+    balance.ts          TUTTI i numeri (SCREEN, ROOM, PHYSICS, RAGDOLL, GRAB,
+                        DAMAGE, ECONOMY, MOOD, FX, WEAPON_STATS)
+    palette.ts          Sweetie 16: PALETTE_HEX, C, col(), hex()
+  gfx/
+    pixelSprite.ts      SpriteData (string[]) → texture: makeSprite/makeSprites
+    sprites.ts          sprite di Tony, stanza e UI + registerSprites()
+    pixelFont.ts        font bitmap 5x7: pixelText, setPixelText, formatCompact
+    effects.ts          spawnParticles, hitFlash, shake, hitStop/isFrozen,
+                        damageNumber, damageColor, popFrames
+    ui.ts               drawPanel (riquadro 1px), ArcadeButton (si abbassa di 1px)
+  audio/
+    sfx.ts              unlockAudio, setMuted, tone, noise, playHit, playPunch,
+                        playSqueak, playWhiff, playShot, playExplosion, playCoin,
+                        playClick, playBuy, playError, playLevelUp, playWhoosh
+  entities/
+    Ragdoll.ts          Tony: 10 parti Matter + giunti, presa/lancio, umore
+    Room.ts             stanza: grafica + 4 corpi statici
+  weapons/
+    Weapon.ts           classe base astratta + WeaponContext + WeaponPointer
+    Punch.ts            Pugno (unica arma per ora)
+    registry.ts         WEAPON_REGISTRY: elenco delle armi
+  systems/
+    events.ts           event bus tipizzato (CONTRATTO PRINCIPALE)
+    damage.ts           dealDamage(), impactDamage(): unica fonte di 'damage'
+    economy.ts          danno → monete, spend/add/canAfford
+    save.ts             localStorage versionato: load/save/getSave/patchSave
+    feedback.ts         numeri, particelle, shake, hit-stop e suoni sui colpi
+  scenes/
+    Boot.ts             genera texture/font, init save + economy, avvia Game
+    Game.ts             stanza, Tony, fisica a passo fisso, input → arma
+    UI.ts               HUD sovrapposto (scena separata, non trema)
+```
+
+Ordine scene: `Boot` → `Game` → (`Game` lancia) `UI` in parallelo.
+Nuove scene sovrapposte (negozio, popup livello) si lanciano con
+`this.scene.launch('Shop')` e si mettono **sopra** `UI` nella lista scene di
+`main.ts`.
+
+---
+
+## 3. Event bus (`src/systems/events.ts`)
+
+```ts
+import { events, Subscriptions } from '../systems/events';
+
+const off = events.on('damage', (e) => { /* ... */ });
+events.on('coins:changed', (e) => {/* ... */}, true); // replay: riceve subito l'ultimo valore
+events.emit('weapon:request', { weaponId: 'bat' });
+events.peek('coins:changed');                     // ultimo payload, senza iscriversi
+```
+
+| Evento | Payload | Chi lo emette | Note |
+|---|---|---|---|
+| `damage` | `{ amount, part, x, y, weaponId, strong }` | solo `damage.dealDamage()` | `amount` è finale (testa x2, arrotondato, >= 1). `weaponId` = id arma o `'impact'` per urti contro la stanza. `strong` = sopra `FX.strongHitDamage` |
+| `coins:changed` | `{ coins, delta }` | `economy` | `delta` < 0 = spesa |
+| `damage:total` | `{ total }` | `economy` | danno cumulativo |
+| `weapon:selected` | `{ weaponId, name, iconKey }` | `Game.selectWeapon` | il save lo memorizza |
+| `weapon:request` | `{ weaponId }` | negozio / barra armi | `Game` seleziona l'arma |
+| `level:up` | `{ level }` | sistema livelli (da fare) | il save salva `level` |
+| `mood:changed` | `{ mood: 'normal' \| 'hurt' \| 'dizzy' }` | `Ragdoll` | |
+| `ragdoll:grab` | `{ part }` | `Ragdoll` | |
+| `ragdoll:release` | `{ part, vx, vy }` | `Ragdoll` | velocità del lancio in px/step |
+| `settings:changed` | `{ muted }` | UI | sfx e save ascoltano |
+
+Per aggiungere un evento: aggiungi la chiave a `GameEvents` con il tipo del
+payload e una riga in questa tabella. Nomi in stile `area:azione`.
+
+`PartName` = `'head' | 'torso' | 'armUpperL' | 'armLowerL' | 'armUpperR' |
+'armLowerR' | 'legUpperL' | 'legLowerL' | 'legUpperR' | 'legLowerR'`.
+
+---
+
+## 4. Danno (`src/systems/damage.ts`)
+
+- **Non emettere mai `damage` a mano.** Chiama
+  `dealDamage({ part, x, y, amount, weaponId })` con il danno *grezzo*:
+  applica `DAMAGE.partMultiplier` (testa x2), arrotonda ed emette.
+- Gli urti di Tony contro qualunque corpo non suo li gestisce già il
+  Ragdoll: `impactDamage(velocitàRelativaNormale)` restituisce 0 sotto
+  `DAMAGE.impactThreshold` (e sotto `minImpactDamage`), con un cooldown per
+  parte (`partCooldownMs`).
+- **Armi fisiche** (mazza, palla, proiettile con corpo Matter): metti sul
+  corpo `body.weaponId = '<id>'` e, se serve, `body.damageScale = 1.5`.
+  Gli urti con Tony verranno attribuiti a quell'arma e scalati, senza
+  codice in più.
+- L'economia, l'HUD, il feedback e il flash ascoltano `damage`: un'arma
+  nuova riceve tutto gratis chiamando `dealDamage`.
+
+---
+
+## 5. Armi (`src/weapons/`)
+
+### Classe base `Weapon<S>`
+
+```ts
+abstract class Weapon<S extends WeaponStats = WeaponStats> {
+  abstract readonly id: string;      // = chiave in WEAPON_STATS
+  abstract readonly name: string;    // per HUD/negozio, MAIUSCOLO
+  abstract readonly icon: SpriteData;// icona pixel, texture `icon-<id>`
+  readonly allowsGrab = true;        // false = la scena non trascina Tony
+  level = 0;                         // potenziamento, lo imposta il negozio
+  get stats(): S;                    // WEAPON_STATS[id] passato a statsForLevel()
+  protected statsForLevel(base: S, level: number): S; // override per gli upgrade
+  protected tryUse(now?): boolean;   // rispetta stats.cooldownMs
+  protected hit(h: HitInput): number;// = ctx.dealDamage
+  ensureIcon(): string;              // crea la texture dell'icona
+  activate(): void; deactivate(): void;
+  onPointerDown(p: WeaponPointer): void;
+  onPointerMove(p: WeaponPointer): void;
+  onPointerUp(p: WeaponPointer): void;
+  update(dtMs: number): void;
+}
+```
+
+`WeaponContext` (passato al costruttore): `{ scene, ragdoll, dealDamage }`.
+
+`WeaponPointer` (stato di un dito/mouse, coordinate mondo):
+`id, x, y, downX, downY, downTime, time, downHit (parte sotto il dito al
+pointerdown, o null), grabbing, wasGrab, vx, vy` (velocità del gesto in px/step).
+
+### Regola tap / presa (in `Game.ts`)
+
+Se il tocco parte su Tony e il dito si muove di `GRAB.dragStartDistance` px
+o resta giù per `GRAB.holdStartMs`, la scena **afferra** Tony
+(`grabbing = wasGrab = true`); al rilascio lo lancia con la velocità del
+gesto. Altrimenti il rilascio è un **tap** (`wasGrab === false`). Le armi
+ricevono comunque tutti gli eventi e decidono: il Pugno agisce solo
+`onPointerUp` se `!p.wasGrab`. Un'arma che non vuole la presa (es. una
+pistola che spara tenendo premuto) imposta `allowsGrab = false`.
+
+### Aggiungere un'arma
+
+1. `config/balance.ts`: aggiungi in `WEAPON_STATS` una voce con `price`,
+   `damage`, `cooldownMs` + i campi propri dell'arma.
+2. `src/weapons/<Nome>.ts`: `class Bat extends Weapon<(typeof WEAPON_STATS)['bat']>`
+   con `id`, `name`, `icon`; usa `this.ctx.ragdoll` per spingere Tony e
+   `this.hit()` per il danno diretto; `effects`/`sfx` per il feedback extra.
+3. `src/weapons/registry.ts`: `{ id: 'bat', create: (ctx) => new Bat(ctx) }`.
+4. Selezione: `events.emit('weapon:request', { weaponId: 'bat' })`.
+
+### API di Tony utili alle armi (`entities/Ragdoll.ts`)
+
+- `ragdoll.partAt(x, y, tolleranza?)` → `{ part, x, y } | null`
+- `ragdoll.applyImpulse(part, x, y, dvx, dvy)`: Δv in px/step applicato in un
+  punto (genera anche rotazione)
+- `ragdoll.addVelocity(dvx, dvy, tranne?)`: spinta a tutto il corpo
+- `ragdoll.applyRadialImpulse(x, y, raggio, forza)` → parti colpite (esplosioni)
+- `ragdoll.centerOfMass()`, `ragdoll.parts`, `ragdoll.bodies`,
+  `ragdoll.partOfBody(body)`, `ragdoll.currentMood`, `ragdoll.respawn()`
+- `ragdoll.isGrabbed()`
+
+Tony non esce mai dalla stanza: velocità limitata, parti fuori dai bordi
+riportate dentro, giunti stirati per troppo tempo → `respawn()`.
+
+---
+
+## 6. Effetti e audio
+
+`gfx/effects.ts` (tutte con `scene` come primo argomento):
+
+| Funzione | Uso |
+|---|---|
+| `spawnParticles(scene, x, y, { count, colors, speed, angle, spread, gravity, lifeMs, size })` | quadratini 1x1/2x2 che lampeggiano prima di sparire |
+| `hitFlash(sprite, frames = 2)` | flash bianco pieno |
+| `shake(scene, px, ms)` | screen shake a pixel interi (solo camera di gioco) |
+| `hitStop(scene, ms)` / `isFrozen(scene)` | freeze di fisica e particelle (30-60 ms) |
+| `damageNumber(scene, x, y, testo, colore)` / `damageColor(n)` | numero pixel che salta e svanisce |
+| `popFrames(scene, x, y, [chiaviTexture], frameMs)` | animazione usa e getta a pochi frame |
+
+Il feedback standard dei colpi è già cablato in `systems/feedback.ts`
+(ascolta `damage`): un'arma nuova non deve rifarlo, solo aggiungere il suo
+effetto specifico (scintille, bossolo, esplosione...).
+
+`audio/sfx.ts`: tutte le `play*()` sono sicure anche ad audio bloccato e
+hanno un limitatore anti-raffica. Per nuovi suoni usa `tone()` e `noise()`.
+
+UI (`gfx/ui.ts`): `drawPanel(g, x, y, w, h, stile)` e
+`new ArcadeButton(scene, x, y, { w, h, content, onClick })`.
+
+---
+
+## 7. Sprite (`gfx/pixelSprite.ts`)
+
+```ts
+const ICON: SpriteData = [
+  '..0000..',
+  '.033330.',   // ogni carattere = indice palette 0-f, '.' = trasparente
+];
+makeSprite(scene, 'icon-bat', ICON);
+```
+
+Legenda: `0` black `1` plum `2` red `3` orange `4` yellow `5` lime `6` green
+`7` teal `8` navy `9` blue `a` sky `b` cyan `c` white `d` silver `e` slate
+`f` charcoal. Contorno scuro `0` attorno agli oggetti. Animazioni: 2-4
+texture distinte (`fx-pow`, `fx-pow-small`...). Per passare agli sprite
+Aseprite: aggiungi un `preload()` in `Boot` che carica un PNG con la stessa chiave (`makeSprite` salta le chiavi già esistenti).
+
+Tony: testa 16x17 (con ciuffo; faccia `tony-head`, `-blink`, `-hurt`,
+`-dizzy-a/b`), busto 14x18 con toppa blu, braccia 5x10 (2 pezzi),
+gambe 6x11 + 6x12 (2 pezzi).
+
+---
+
+## 8. Salvataggio (`src/systems/save.ts`)
+
+- Chiave `localStorage`: `splaktony.save`; `SAVE_VERSION = 1`.
+- `load()` / `save(data)`: lettura/scrittura diretta.
+- `getSave()` / `patchSave(patch)`: stato condiviso in memoria con scrittura
+  debounce (800 ms) + flush su `pagehide` / tab nascosta.
+- Schema v1: `coins, totalDamage, coinRemainder, level, xp, selectedWeapon,
+  ownedWeapons, weaponLevels, settings.muted`.
+- **Cambiare schema**: incrementa `SAVE_VERSION`, aggiorna `SaveData` e
+  `defaultSave()`, aggiungi `MIGRATIONS[vecchia] = (d) => ({ ...d, version: nuova, ... })`.
+  Non cancellare mai una migrazione.
+
+## 9. Economia (`src/systems/economy.ts`)
+
+1 moneta ogni `ECONOMY.damagePerCoin` (10) danni, con resto conservato.
+`economy.canAfford(n)`, `economy.spend(n)` (true se riuscita),
+`economy.add(n)`. Ogni variazione emette `coins:changed` e salva.
+
+---
+
+## 10. Cosa NON c'è ancora (per i prossimi agenti)
+
+- Altre armi, negozio, potenziamenti (`Weapon.level` + `statsForLevel`).
+- Livelli/XP (`level:up`, campi `level`/`xp` già nel save).
+- Barra di selezione armi (il riquadro arma in basso a sinistra dell'HUD
+  mostra già l'arma attiva da `weapon:selected`).
