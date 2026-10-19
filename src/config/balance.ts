@@ -165,6 +165,68 @@ export const WEAPON_STATS = {
     /** quota d'impulso data alle altre parti */
     bodyShare: 0.35,
   },
+  // ---- FEATURE B: armi da fuoco ----
+  pistola: {
+    price: 150,
+    damage: 12,
+    /** pausa minima tra due colpi (un colpo per tap) */
+    cooldownMs: 220,
+    /** Δv impresso alla parte colpita (px/step), dal basso verso il punto */
+    impulse: 6,
+    /** quota d'impulso data alle altre parti */
+    bodyShare: 0.15,
+    /** tolleranza (px) del colpo attorno alle parti di Tony */
+    hitTolerance: 3,
+  },
+  mitragliatrice: {
+    price: 600,
+    damage: 3,
+    /** cadenza della raffica: ms tra due colpi mentre il dito è giù */
+    cooldownMs: 85,
+    impulse: 2.5,
+    bodyShare: 0.05,
+    hitTolerance: 2,
+    /** raggio massimo (px) della dispersione casuale attorno al dito */
+    spread: 6,
+  },
 } satisfies Record<string, WeaponStats>;
 
 export type WeaponId = keyof typeof WEAPON_STATS;
+
+// ---- FEATURE B: armi da fuoco ----
+/** Costanti condivise da pistola e mitragliatrice (fori, bossoli, lampo). */
+export const FIREARMS = {
+  /** punto (fuori schermo, in basso) da cui "spara" il giocatore: dà la direzione dell'impulso */
+  originX: 90,
+  originY: 380,
+  /** componente casuale della direzione dell'impulso (0 = dritto) */
+  impulseJitter: 0.25,
+  /** durata dei frame del lampo di sparo */
+  flashFrameMs: 35,
+  /** fori di proiettile sul muro */
+  maxHoles: 30,
+  holeLifeMs: 4000,
+  holeBlinkMs: 900,
+  holeBlinkStepMs: 90,
+  holeDepth: 1.5,
+  /** bossoli espulsi dalla mitragliatrice */
+  maxShells: 24,
+  shellEjectX: 166,
+  shellEjectY: 262,
+  shellVx: -1.7,
+  shellVxJitter: 0.9,
+  shellVy: -3.4,
+  shellVyJitter: 1,
+  shellGravity: 0.22,
+  /** frazione di velocità verticale conservata a ogni rimbalzo */
+  shellBounce: 0.45,
+  /** attrito orizzontale a ogni contatto col pavimento */
+  shellFriction: 0.6,
+  /** sotto questa velocità verticale (px/step) il bossolo si ferma */
+  shellStopSpeed: 0.8,
+  shellSpinMs: 60,
+  shellRestMs: 2500,
+  shellBlinkMs: 700,
+  shellBlinkStepMs: 90,
+  shellDepth: 17,
+} as const;
