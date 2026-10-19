@@ -3,7 +3,7 @@ import { PHYSICS, ROOM_INNER, THROWN, WEAPON_STATS, type WeaponStats } from '../
 import { C } from '../config/palette';
 import { noise, tone } from '../audio/sfx';
 import type { Part } from '../entities/Ragdoll';
-import { isFrozen, spawnParticles } from '../gfx/effects';
+import { acquireImage, isFrozen, releaseImage, spawnParticles } from '../gfx/effects';
 import { makeSprites, type SpriteData } from '../gfx/pixelSprite';
 import { Weapon, type WeaponPointer } from './Weapon';
 
@@ -99,7 +99,7 @@ export abstract class ThrownWeapon<S extends ThrownStats> extends Weapon<S> {
       pr.age += dt;
       const alive = this.step(pr, steps);
       if (!alive) {
-        pr.img.destroy();
+        releaseImage(pr.img);
         this.projectiles.splice(i, 1);
       } else {
         this.draw(pr);
@@ -116,7 +116,9 @@ export abstract class ThrownWeapon<S extends ThrownStats> extends Weapon<S> {
     const midX = (ROOM_INNER.left + ROOM_INNER.right) / 2;
     const fromRight = tx < midX || (tx === midX && Math.random() < 0.5);
     const ox = fromRight ? ROOM_INNER.right - THROWN.originInset : ROOM_INNER.left + THROWN.originInset;
-    const oy = ROOM_INNER.bottom - THROWN.originAboveFloor;
+    // bersaglio basso (Tony sdraiato a terra): il lancio parte più in alto e
+    // scende verso di lui, altrimenti la traiettoria gli passerebbe sopra
+    const oy = Math.min(ROOM_INNER.bottom - THROWN.originAboveFloor, ty - THROWN.lowTargetLift);
 
     let dx = tx - ox;
     let dy = ty - oy;
@@ -128,16 +130,11 @@ export abstract class ThrownWeapon<S extends ThrownStats> extends Weapon<S> {
     }
     dx /= len;
     dy /= len;
-    if (dy > -THROWN.minUpward) {
-      dy = -THROWN.minUpward;
-      const s = Math.sqrt(1 - dy * dy);
-      dx = Math.sign(dx || (fromRight ? -1 : 1)) * s;
-    }
 
-    while (this.projectiles.length >= THROWN.maxProjectiles) this.projectiles.shift()?.img.destroy();
+    while (this.projectiles.length >= THROWN.maxProjectiles) releaseImage(this.projectiles.shift()?.img);
 
     const angle = Math.atan2(dy, dx);
-    const img = scene.add.image(Math.round(ox), Math.round(oy), this.frameFor(angle, 0, this.spinsInFlight).key).setDepth(17);
+    const img = acquireImage(scene, ox, oy, this.frameFor(angle, 0, this.spinsInFlight).key).setDepth(17);
     const pr: Projectile = {
       img,
       state: 'fly',
@@ -317,7 +314,7 @@ export abstract class ThrownWeapon<S extends ThrownStats> extends Weapon<S> {
   }
 
   private clearAll(): void {
-    for (const pr of this.projectiles) pr.img.destroy();
+    for (const pr of this.projectiles) releaseImage(pr.img);
     this.projectiles.length = 0;
   }
 

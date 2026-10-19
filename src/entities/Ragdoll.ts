@@ -339,14 +339,17 @@ export class Ragdoll {
   }
 
   destroy(): void {
-    this.scene.matter.world.off('collisionstart', this.onCollision, this);
     this.subs.clear();
-    for (const id of [...this.grabs.keys()]) this.release(id, 0, 0, false);
-    for (const j of this.joints) this.scene.matter.world.removeConstraint(j.c);
-    for (const p of this.parts.values()) {
-      this.scene.matter.world.remove(p.body);
-      p.sprite.destroy();
+    // allo shutdown della scena il mondo Matter può essere già stato distrutto
+    const world = this.scene.matter?.world as Phaser.Physics.Matter.World | null | undefined;
+    if (world?.engine) {
+      world.off('collisionstart', this.onCollision, this);
+      for (const id of [...this.grabs.keys()]) this.release(id, 0, 0, false);
+      for (const j of this.joints) world.removeConstraint(j.c);
+      for (const p of this.parts.values()) world.remove(p.body);
     }
+    this.grabs.clear();
+    for (const p of this.parts.values()) p.sprite.destroy();
     this.stars.forEach((s) => s.destroy());
     this.parts.clear();
     this.byBodyId.clear();

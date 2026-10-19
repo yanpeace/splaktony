@@ -70,7 +70,11 @@ export class ArcadeButton extends Phaser.GameObjects.Container {
       this.add(opts.content);
     }
     this.setSize(opts.w, opts.h);
-    this.setInteractive(new Phaser.Geom.Rectangle(0, 0, opts.w, opts.h + 1), Phaser.Geom.Rectangle.Contains);
+    // Phaser somma displayOrigin (metà Container) al punto locale: l'area parte da (w/2, h/2)
+    this.setInteractive(
+      new Phaser.Geom.Rectangle(opts.w / 2, opts.h / 2, opts.w, opts.h + 1),
+      Phaser.Geom.Rectangle.Contains,
+    );
     this.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
       ev.stopPropagation();
       this.setPressed(true);

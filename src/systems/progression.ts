@@ -23,6 +23,11 @@ export function xpForLevel(lv: number): number {
   return Math.max(1, Math.round(PROGRESSION.xpBase * Math.pow(Math.max(1, lv), PROGRESSION.xpExponent)));
 }
 
+/** Monete premio per aver raggiunto il livello `lv`. */
+export function levelReward(lv: number): number {
+  return PROGRESSION.levelRewardBase + PROGRESSION.levelRewardPerLevel * lv;
+}
+
 export function getLevel(): number {
   return level;
 }
@@ -40,6 +45,7 @@ function addXp(amount: number): void {
     level++;
     leveled = true;
     events.emit('level:up', { level });
+    economy.add(levelReward(level));
   }
   patchSave(leveled ? { xp, level } : { xp });
 }
@@ -48,6 +54,8 @@ function addXp(amount: number): void {
 
 let comboHits = 0;
 let lastHitAt = -Infinity;
+/** ultimo colpo che ha fatto salire il contatore (vedi COMBO.minHitGapMs) */
+let lastCountedAt = -Infinity;
 let bonusRemainder = 0;
 
 export interface ComboState {
@@ -76,8 +84,14 @@ function comboHit(amount: number): number {
   if (now - lastHitAt > COMBO.resetMs) {
     comboHits = 0;
     bonusRemainder = 0;
+    lastCountedAt = -Infinity;
   }
-  comboHits++;
+  // raffiche, esplosioni e urti multipli tengono viva la combo ma la fanno
+  // salire al massimo di un colpo ogni minHitGapMs
+  if (now - lastCountedAt >= COMBO.minHitGapMs) {
+    comboHits++;
+    lastCountedAt = now;
+  }
   lastHitAt = now;
   const mult = multFor(comboHits);
   if (mult > 1) {

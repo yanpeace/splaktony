@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { EXPLOSIVES, PHYSICS, ROOM_INNER, WEAPON_STATS, type WeaponStats } from '../config/balance';
 import { C, col } from '../config/palette';
 import { playExplosion, playWhoosh, tone } from '../audio/sfx';
-import { hitStop, isFrozen, popFrames, shake, spawnParticles } from '../gfx/effects';
+import { acquireImage, hitStop, isFrozen, popFrames, releaseImage, shake, spawnParticles } from '../gfx/effects';
 import { makeSprites, type SpriteData } from '../gfx/pixelSprite';
 import { Weapon, type WeaponContext, type WeaponPointer } from './Weapon';
 
@@ -476,7 +476,7 @@ export abstract class ThrownExplosive<S extends ExplosiveStats> extends Weapon<S
       const drift = (Math.random() - 0.5) * 8;
       const rise = E.smokeRise * (0.6 + Math.random() * 0.6);
       const life = E.smokeMs * (0.7 + Math.random() * 0.5);
-      const img = scene.add.image(Math.round(sx), Math.round(sy), SMOKE_KEYS[0]).setDepth(54);
+      const img = acquireImage(scene, sx, sy, SMOKE_KEYS[0]).setDepth(54);
       this.puffs.add(img);
       scene.tweens.addCounter({
         from: 0,
@@ -495,7 +495,7 @@ export abstract class ThrownExplosive<S extends ExplosiveStats> extends Weapon<S
         },
         onComplete: () => {
           this.puffs.delete(img);
-          img.destroy();
+          releaseImage(img);
         },
       });
     }
@@ -511,7 +511,7 @@ export abstract class ThrownExplosive<S extends ExplosiveStats> extends Weapon<S
       e.extra?.destroy();
     }
     this.live = [];
-    this.puffs.forEach((p) => p.destroy());
+    this.puffs.forEach((p) => releaseImage(p));
     this.puffs.clear();
     this.active = false;
   }

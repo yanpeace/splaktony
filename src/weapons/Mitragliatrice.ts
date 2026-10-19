@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { FIREARMS, PHYSICS, ROOM_INNER, WEAPON_STATS } from '../config/balance';
 import { noise, playShot, tone } from '../audio/sfx';
-import { isFrozen } from '../gfx/effects';
+import { acquireImage, isFrozen, releaseImage } from '../gfx/effects';
 import { makeSprites, type SpriteData } from '../gfx/pixelSprite';
 import { BulletHoles, ensureFirearmSprites, fireHitscan } from './Pistola';
 import { Weapon, type WeaponPointer } from './Weapon';
@@ -45,10 +45,10 @@ class Shells {
   constructor(private readonly scene: Phaser.Scene) {}
 
   eject(): void {
-    if (this.list.length >= FIREARMS.maxShells) this.list.shift()?.img.destroy();
+    if (this.list.length >= FIREARMS.maxShells) releaseImage(this.list.shift()?.img);
     const x = FIREARMS.shellEjectX;
     const y = FIREARMS.shellEjectY;
-    const img = this.scene.add.image(x, y, SHELL_KEYS.h).setOrigin(0).setDepth(FIREARMS.shellDepth);
+    const img = acquireImage(this.scene, x, y, SHELL_KEYS.h).setOrigin(0).setDepth(FIREARMS.shellDepth);
     this.list.push({
       img,
       x,
@@ -72,7 +72,7 @@ class Shells {
       } else {
         const age = now - s.restAt;
         if (age >= FIREARMS.shellRestMs + FIREARMS.shellBlinkMs) {
-          s.img.destroy();
+          releaseImage(s.img);
           this.list.splice(i, 1);
           continue;
         }
@@ -138,7 +138,7 @@ class Shells {
   }
 
   clear(): void {
-    this.list.forEach((s) => s.img.destroy());
+    this.list.forEach((s) => releaseImage(s.img));
     this.list = [];
   }
 

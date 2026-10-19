@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { FIREARMS, ROOM_INNER, WEAPON_STATS } from '../config/balance';
 import { C } from '../config/palette';
 import { playShot } from '../audio/sfx';
-import { popFrames, spawnParticles } from '../gfx/effects';
+import { acquireImage, popFrames, releaseImage, spawnParticles } from '../gfx/effects';
 import { makeSprites, type SpriteData } from '../gfx/pixelSprite';
 import type { HitInput } from '../systems/damage';
 import type { Ragdoll } from '../entities/Ragdoll';
@@ -88,10 +88,9 @@ export class BulletHoles {
   }
 
   add(x: number, y: number): void {
-    if (this.holes.length >= FIREARMS.maxHoles) this.holes.shift()?.img.destroy();
+    if (this.holes.length >= FIREARMS.maxHoles) releaseImage(this.holes.shift()?.img);
     const key = HOLE_KEYS[Math.floor(Math.random() * HOLE_KEYS.length)];
-    const img = this.scene.add
-      .image(Math.round(x) - 1, Math.round(y) - 1, key)
+    const img = acquireImage(this.scene, Math.round(x) - 1, Math.round(y) - 1, key)
       .setOrigin(0)
       .setDepth(FIREARMS.holeDepth);
     this.holes.push({ img, bornAt: this.scene.time.now });
@@ -104,7 +103,7 @@ export class BulletHoles {
       const h = this.holes[i];
       const age = now - h.bornAt;
       if (age >= end) {
-        h.img.destroy();
+        releaseImage(h.img);
         this.holes.splice(i, 1);
       } else if (age > FIREARMS.holeLifeMs) {
         // lampeggio a scatti, sempre più spento verso la fine
@@ -115,7 +114,7 @@ export class BulletHoles {
   }
 
   clear(): void {
-    this.holes.forEach((h) => h.img.destroy());
+    this.holes.forEach((h) => releaseImage(h.img));
     this.holes = [];
   }
 

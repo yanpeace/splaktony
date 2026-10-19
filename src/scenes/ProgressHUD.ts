@@ -119,6 +119,8 @@ export class ProgressHUD extends Phaser.Scene {
 
   private drawCombo(): void {
     const c = getCombo();
+    // niente combo e niente da cancellare: nessun ridisegno
+    if (c.mult <= 1 && this.lastMult === 1) return;
     this.comboG.clear();
     if (c.mult <= 1) {
       this.comboText.setVisible(false);

@@ -132,7 +132,12 @@ export const FX = {
   particlesPerDamage: 0.4,
   particlesMin: 3,
   particlesMax: 18,
-  maxParticles: 220,
+  /** tetti dei pool di effetti (oltre si riciclano i più vecchi): 60 fps su telefono */
+  maxParticles: 160,
+  maxDamageNumbers: 14,
+  maxPops: 16,
+  /** immagini tenute pronte nel pool condiviso (proiettili, bossoli, fori, fumo...) */
+  maxPooledImages: 96,
   /** soglie colore del numero di danno */
   numberMid: 10,
   numberBig: 25,
@@ -153,6 +158,13 @@ export interface WeaponStats {
   [extra: string]: number;
 }
 
+/*
+ * Curva delle armi (ribilanciamento post-merge): ogni arma rende ~1,3-1,4x la
+ * precedente in danni/min con un giocatore attivo (misurato nel browser):
+ * pugno ~2000, shuriken ~2900, coltello ~4000, pistola ~5200, mitra ~6600,
+ * granata ~9000, dinamite ~13000 (gli esplosivi tengono
+ * meno la combo, quindi fanno più danno per restare convenienti). I prezzi sono in SHOP.prices.
+ */
 export const WEAPON_STATS = {
   punch: {
     price: 0,
@@ -167,28 +179,28 @@ export const WEAPON_STATS = {
   },
   // ---- FEATURE A: armi da lancio ----
   shuriken: {
-    price: 60,
-    damage: 3,
+    price: 0, // prezzo in SHOP.prices
+    damage: 12,
     cooldownMs: 140,
     /** velocità di volo (px/step) */
-    speed: 9,
+    speed: 10,
     /** Δv impresso alla parte colpita nella direzione di volo (px/step) */
-    impulse: 4,
+    impulse: 6,
     /** quanto resta conficcato prima di staccarsi */
     stickMs: 3000,
   },
   coltello: {
-    price: 150,
-    damage: 9,
-    cooldownMs: 420,
-    speed: 6,
-    impulse: 6.5,
+    price: 0, // prezzo in SHOP.prices
+    damage: 22,
+    cooldownMs: 380,
+    speed: 8,
+    impulse: 8,
     stickMs: 3000,
   },
   // ---- FEATURE B: armi da fuoco ----
   pistola: {
-    price: 150,
-    damage: 12,
+    price: 0, // prezzo in SHOP.prices
+    damage: 19,
     /** pausa minima tra due colpi (un colpo per tap) */
     cooldownMs: 220,
     /** Δv impresso alla parte colpita (px/step), dal basso verso il punto */
@@ -199,8 +211,8 @@ export const WEAPON_STATS = {
     hitTolerance: 3,
   },
   mitragliatrice: {
-    price: 600,
-    damage: 3,
+    price: 0, // prezzo in SHOP.prices
+    damage: 7.5,
     /** cadenza della raffica: ms tra due colpi mentre il dito è giù */
     cooldownMs: 85,
     impulse: 2.5,
@@ -211,9 +223,9 @@ export const WEAPON_STATS = {
   },
   // ---- FEATURE C: esplosivi ----
   granata: {
-    price: 150,
+    price: 0, // prezzo in SHOP.prices
     /** danno grezzo per parte al centro dell'esplosione (cala con la distanza) */
-    damage: 10,
+    damage: 34,
     cooldownMs: 900,
     /** tempo dal lancio all'esplosione */
     fuseMs: 2000,
@@ -229,9 +241,9 @@ export const WEAPON_STATS = {
     shakePx: 3,
   },
   dinamite: {
-    price: 400,
-    damage: 18,
-    cooldownMs: 1800,
+    price: 0, // prezzo in SHOP.prices
+    damage: 54,
+    cooldownMs: 1400,
     fuseMs: 3000,
     radius: 52,
     pushRadius: 66,
@@ -249,8 +261,8 @@ export const THROWN = {
   originInset: 6,
   /** altezza del punto di lancio sopra il pavimento */
   originAboveFloor: 4,
-  /** componente minima verso l'alto della direzione di lancio (0..1) */
-  minUpward: 0.15,
+  /** il punto di lancio sta almeno così sopra il bersaglio (colpisce Tony a terra) */
+  lowTargetLift: 28,
   /** passo massimo (px) del controllo collisioni lungo il tragitto */
   subStepPx: 2,
   /** tolleranza (px) di partAt per il proiettile */
@@ -372,14 +384,11 @@ export const EXPLOSIVES = {
 /**
  * Negozio e potenziamenti (vedi systems/upgrades.ts e scenes/Shop.ts).
  *
- * Obiettivo: un acquisto (arma o potenziamento) ogni 2-3 minuti di gioco.
- * Reddito misurato col solo Pugno (simulazione nel browser): 4 tap/s su
- * Tony ≈ 2800 danni/min (55% pugno, 45% urti) ≈ 280 monete/min; un lancio
- * ogni 2,5 s ≈ 170 danni a lancio ≈ 400 monete/min. Un giocatore vero, con
- * pause e tocchi a vuoto, fa circa 200 monete/min. Ogni arma nuova dovrebbe
- * aumentare il reddito di ~1,7 volte, quindi i prezzi crescono di ~2 volte
- * per gradino; i potenziamenti riempiono i buchi tra un'arma e l'altra.
- * Simulazione "compra la cosa più economica": acquisto medio ogni ~2 min.
+ * Curva dei primi 15 minuti (simulata con i danni/min misurati nel browser,
+ * giocatore umano = 60% di un giocatore sempre attivo, combo media x2,5):
+ *   1:40 shuriken · 2:40 potenziamento · 5:30 coltello · 6:50 potenziamento ·
+ *   10:25 pistola · 11:50 potenziamento · ~15:00 mitragliatrice · livello ~12.
+ * Un acquisto ogni ~2 minuti; granata e dinamite sono obiettivi di lungo periodo.
  */
 export const SHOP = {
   /**
@@ -387,10 +396,10 @@ export const SHOP = {
    * L'ordine è quello di "potenza" attesa delle armi.
    */
   prices: {
-    shuriken: 500,
-    coltello: 1100,
-    pistola: 2200,
-    mitragliatrice: 4500,
+    shuriken: 800,
+    coltello: 1800,
+    pistola: 2900,
+    mitragliatrice: 3700,
     granata: 9000,
     dinamite: 18000,
   } as Record<string, number>,
@@ -399,13 +408,15 @@ export const SHOP = {
   /** livelli di potenziamento per arma (0 = base) */
   maxLevel: 5,
   /** moltiplicatore del danno per livello 0..maxLevel */
-  damageMult: [1, 1.25, 1.5, 1.8, 2.15, 2.6],
+  damageMult: [1, 1.1, 1.2, 1.3, 1.4, 1.5],
   /** moltiplicatore della cadenza per livello: cooldownMs / valore */
-  rateMult: [1, 1.1, 1.2, 1.3, 1.45, 1.6],
+  rateMult: [1, 1.04, 1.08, 1.12, 1.16, 1.2],
+  // danno x cadenza al L5 = 1,8x: ogni livello ~+12%, mai più del salto alla
+  // prossima arma (~1,35x), così comprare armi nuove conviene sempre
   /** costo del primo potenziamento = prezzo arma * upgradeShare ... */
-  upgradeShare: 0.35,
-  /** ... ma mai meno di così (il Pugno costa 0): Pugno 300/480/770/1230/1970 */
-  upgradeMinBase: 300,
+  upgradeShare: 0.45,
+  /** ... ma mai meno di così (il Pugno costa 0): Pugno 500/800/1280/2050/3280 */
+  upgradeMinBase: 500,
   /** ogni livello costa upgradeGrowth volte il precedente */
   upgradeGrowth: 1.6,
   /** i costi si arrotondano a multipli di questo */
@@ -421,8 +432,12 @@ export const PROGRESSION = {
   /** XP guadagnata per ogni punto di danno */
   xpPerDamage: 1,
   /** XP per passare dal livello L al L+1 = round(xpBase * L ^ xpExponent) */
-  xpBase: 60,
-  xpExponent: 1.45,
+  // livello 2 dopo ~10 s, livello 5 dopo ~2', livello ~12 dopo 15' di gioco attivo
+  xpBase: 220,
+  xpExponent: 1.5,
+  /** monete premio a ogni level up: levelRewardBase + levelRewardPerLevel * nuovo livello */
+  levelRewardBase: 40,
+  levelRewardPerLevel: 20,
   /** durata della scritta "LEVEL UP!" */
   levelUpShowMs: 1500,
 } as const;
@@ -431,11 +446,15 @@ export const PROGRESSION = {
 export const COMBO = {
   /** senza colpi per questo tempo la combo si azzera */
   resetMs: 1500,
-  /** soglie (colpi consecutivi → moltiplicatore monete), in ordine crescente */
+  /** colpi più ravvicinati di così (raffiche, esplosioni, urti multipli) contano una volta
+   *  sola: nessuna arma fa salire la combo più in fretta di un dito che tappa */
+  minHitGapMs: 300,
+  /** soglie (colpi consecutivi → moltiplicatore monete), in ordine crescente:
+   *  tappando a ~3/s: x2 dopo ~4 s, x3 dopo ~12 s, x5 dopo ~27 s senza pause */
   tiers: [
-    { hits: 5, mult: 2 },
-    { hits: 12, mult: 3 },
-    { hits: 25, mult: 5 },
+    { hits: 12, mult: 2 },
+    { hits: 35, mult: 3 },
+    { hits: 80, mult: 5 },
   ],
 } as const;
 
@@ -444,14 +463,15 @@ export const DAILY = {
   count: 3,
   /** durata del toast "OBIETTIVO!" */
   toastMs: 1600,
+  // premi ~ 20-60 s di reddito: utili per arrivare prima alla prossima arma
   kinds: {
-    damage: { targets: [300, 500, 1000], rewards: [30, 50, 100] },
-    head: { targets: [10, 20, 40], rewards: [30, 50, 90] },
-    combo: { targets: [3, 5], rewards: [40, 80] },
-    bigHit: { targets: [25, 35, 50], rewards: [30, 50, 90] },
-    impact: { targets: [300, 600, 1000], rewards: [40, 70, 110] },
-    hits: { targets: [50, 100, 200], rewards: [25, 45, 80] },
-    strong: { targets: [10, 20, 40], rewards: [30, 50, 90] },
+    damage: { targets: [3000, 6000, 12000], rewards: [150, 300, 600] },
+    head: { targets: [30, 60, 120], rewards: [120, 240, 450] },
+    combo: { targets: [3, 5], rewards: [150, 300] },
+    bigHit: { targets: [30, 45, 70], rewards: [120, 250, 450] },
+    impact: { targets: [1500, 3000, 6000], rewards: [150, 300, 550] },
+    hits: { targets: [150, 300, 600], rewards: [100, 220, 400] },
+    strong: { targets: [20, 50, 100], rewards: [120, 250, 450] },
   },
 } as const;
 

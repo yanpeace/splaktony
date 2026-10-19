@@ -218,6 +218,15 @@ riportate dentro, giunti stirati per troppo tempo → `respawn()`.
 | `hitStop(scene, ms)` / `isFrozen(scene)` | freeze di fisica e particelle (30-60 ms) |
 | `damageNumber(scene, x, y, testo, colore)` / `damageColor(n)` | numero pixel che salta e svanisce |
 | `popFrames(scene, x, y, [chiaviTexture], frameMs)` | animazione usa e getta a pochi frame |
+| `acquireImage(scene, x, y, chiave)` / `releaseImage(img)` | immagine dal pool condiviso (proiettili, bossoli, fori, fumo...) |
+
+**Prestazioni (60 fps su telefono): niente `scene.add.*` / `destroy()` a ogni
+colpo.** Particelle, numeri di danno e pop vengono da pool interni con un
+tetto (`FX.maxParticles`, `FX.maxDamageNumbers`, `FX.maxPops`; oltre il tetto
+si ricicla il più vecchio). Per gli oggetti di un'arma usa
+`acquireImage()` al posto di `scene.add.image()` e `releaseImage()` al posto
+di `destroy()`: l'immagine torna con stato azzerato (origine 0.5, depth 0,
+niente rotazione/tint/alpha), quindi reimposta ciò che ti serve.
 
 Il feedback standard dei colpi è già cablato in `systems/feedback.ts`
 (ascolta `damage`): un'arma nuova non deve rifarlo, solo aggiungere il suo

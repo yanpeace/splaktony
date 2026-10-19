@@ -23,6 +23,10 @@ const game = new Phaser.Game({
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
   input: { activePointers: 3 },
+  disableContextMenu: true,
+  // 60 fps stabili su telefono: GPU ad alte prestazioni, niente MSAA (pixel art)
+  fps: { target: 60, smoothStep: true },
+  render: { powerPreference: 'high-performance', antialiasGL: false },
   physics: {
     default: 'matter',
     matter: {
