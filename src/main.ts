@@ -5,6 +5,7 @@ import { Boot } from './scenes/Boot';
 import { Game } from './scenes/Game';
 import { Shop } from './scenes/Shop';
 import { UI } from './scenes/UI';
+import { ProgressHUD } from './scenes/ProgressHUD';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -32,7 +33,7 @@ const game = new Phaser.Game({
       debug: false,
     },
   },
-  scene: [Boot, Game, UI, Shop],
+  scene: [Boot, Game, UI, ProgressHUD, Shop],
 });
 
 // utile per il debug da console: window.game

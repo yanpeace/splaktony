@@ -74,6 +74,7 @@ export class Game extends Phaser.Scene {
     });
 
     this.scene.launch('UI');
+    this.scene.launch('ProgressHUD');
   }
 
   selectWeapon(id: string): void {

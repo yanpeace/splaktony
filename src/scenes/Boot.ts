@@ -5,6 +5,7 @@ import { ensurePixelFont } from '../gfx/pixelFont';
 import { registerSprites } from '../gfx/sprites';
 import { initEconomy } from '../systems/economy';
 import { events } from '../systems/events';
+import { initProgression } from '../systems/progression';
 import { initSave } from '../systems/save';
 
 /** Genera texture e font, inizializza i sistemi globali e avvia il gioco. */
@@ -19,6 +20,7 @@ export class Boot extends Phaser.Scene {
 
     const save = initSave();
     initEconomy();
+    initProgression();
     setMuted(save.settings.muted);
     events.on('settings:changed', (s) => setMuted(s.muted));
     events.emit('settings:changed', { ...save.settings });

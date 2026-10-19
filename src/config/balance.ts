@@ -413,3 +413,44 @@ export const SHOP = {
   /** durata del messaggio "monete insufficienti" (ms) */
   toastMs: 1300,
 } as const;
+
+// ---- FEATURE E: progressione ----
+
+/** Esperienza e livelli (systems/progression.ts). */
+export const PROGRESSION = {
+  /** XP guadagnata per ogni punto di danno */
+  xpPerDamage: 1,
+  /** XP per passare dal livello L al L+1 = round(xpBase * L ^ xpExponent) */
+  xpBase: 60,
+  xpExponent: 1.45,
+  /** durata della scritta "LEVEL UP!" */
+  levelUpShowMs: 1500,
+} as const;
+
+/** Combo: colpi ravvicinati moltiplicano le monete. */
+export const COMBO = {
+  /** senza colpi per questo tempo la combo si azzera */
+  resetMs: 1500,
+  /** soglie (colpi consecutivi → moltiplicatore monete), in ordine crescente */
+  tiers: [
+    { hits: 5, mult: 2 },
+    { hits: 12, mult: 3 },
+    { hits: 25, mult: 5 },
+  ],
+} as const;
+
+/** Obiettivi giornalieri: per ogni tipo, target possibili e premio (stesso indice). */
+export const DAILY = {
+  count: 3,
+  /** durata del toast "OBIETTIVO!" */
+  toastMs: 1600,
+  kinds: {
+    damage: { targets: [300, 500, 1000], rewards: [30, 50, 100] },
+    head: { targets: [10, 20, 40], rewards: [30, 50, 90] },
+    combo: { targets: [3, 5], rewards: [40, 80] },
+    bigHit: { targets: [25, 35, 50], rewards: [30, 50, 90] },
+    impact: { targets: [300, 600, 1000], rewards: [40, 70, 110] },
+    hits: { targets: [50, 100, 200], rewards: [25, 45, 80] },
+    strong: { targets: [10, 20, 40], rewards: [30, 50, 90] },
+  },
+} as const;
