@@ -209,6 +209,37 @@ export const WEAPON_STATS = {
     /** raggio massimo (px) della dispersione casuale attorno al dito */
     spread: 6,
   },
+  // ---- FEATURE C: esplosivi ----
+  granata: {
+    price: 150,
+    /** danno grezzo per parte al centro dell'esplosione (cala con la distanza) */
+    damage: 10,
+    cooldownMs: 900,
+    /** tempo dal lancio all'esplosione */
+    fuseMs: 2000,
+    /** raggio del danno (px) */
+    radius: 34,
+    /** raggio e forza (px/step al centro) della spinta radiale */
+    pushRadius: 44,
+    pushStrength: 13,
+    /** spinta extra verso l'alto a tutto Tony (px/step, scalata dalla vicinanza) */
+    upBoost: 3,
+    /** raggio dello sprite dell'esplosione (px) */
+    boomSize: 14,
+    shakePx: 3,
+  },
+  dinamite: {
+    price: 400,
+    damage: 18,
+    cooldownMs: 1800,
+    fuseMs: 3000,
+    radius: 52,
+    pushRadius: 66,
+    pushStrength: 18,
+    upBoost: 4,
+    boomSize: 21,
+    shakePx: 4,
+  },
 } satisfies Record<string, WeaponStats>;
 
 // ---- FEATURE A: armi da lancio ----
@@ -285,4 +316,53 @@ export const FIREARMS = {
   shellBlinkMs: 700,
   shellBlinkStepMs: 90,
   shellDepth: 17,
+} as const;
+
+// ---- FEATURE C: esplosivi ----
+/** Costanti comuni di granata e dinamite (lancio a fionda, rimbalzi, esplosione). */
+export const EXPLOSIVES = {
+  /** gravità dell'esplosivo in volo (px/step²), simile a quella di Matter */
+  gravity: 0.25,
+  /** raggio di collisione con la stanza (px) */
+  bodyRadius: 4,
+  /** fionda: trascinamento minimo per lanciare, massimo considerato (px) */
+  minPull: 6,
+  maxPull: 48,
+  /** velocità di lancio per ogni px di trascinamento (px/step per px) */
+  launchScale: 0.19,
+  /** rimbalzi: quota di velocità conservata sull'asse dell'urto */
+  restitution: 0.45,
+  /** attrito: quota di velocità tangente conservata a ogni urto/contatto */
+  wallFriction: 0.8,
+  floorFriction: 0.86,
+  /** sotto questa velocità verticale (px/step) l'esplosivo smette di rimbalzare */
+  minBounce: 0.7,
+  /** velocità di rotazione in volo per px/step orizzontale (rad/step) */
+  spinPerSpeed: 0.08,
+  /** passi di rotazione visiva (rotazione a scatti) */
+  rotationSteps: 8,
+  /** traiettoria: step simulati, un puntino ogni N step, rimbalzi mostrati */
+  trajSteps: 120,
+  trajDotEvery: 3,
+  trajMaxBounces: 2,
+  /** ms per "passo" dell'animazione dei puntini */
+  trajAnimMs: 90,
+  /** esplosivi in volo contemporaneamente */
+  maxLive: 3,
+  /** quota minima di danno al bordo del raggio (0..1) */
+  minDamageShare: 0.25,
+  explosionFrameMs: 70,
+  hitStopMs: 45,
+  shakeMs: 320,
+  /** sbuffi di fumo per esplosione e loro durata */
+  smokePuffs: 7,
+  smokeMs: 1300,
+  smokeRise: 18,
+  debrisCount: 16,
+  /** granata: lampeggio della spoletta (ms per fase, dall'inizio alla fine) */
+  blinkSlowMs: 260,
+  blinkFastMs: 50,
+  /** dinamite: lunghezza massima della miccia (px) e ogni quanto scintilla */
+  fuseLength: 4,
+  sparkEveryMs: 45,
 } as const;
