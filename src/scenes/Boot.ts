@@ -7,6 +7,7 @@ import { initEconomy } from '../systems/economy';
 import { events } from '../systems/events';
 import { initProgression } from '../systems/progression';
 import { initSave } from '../systems/save';
+import { initLocalSettings } from './Settings';
 
 /** Genera texture e font, inizializza i sistemi globali e avvia il gioco. */
 export class Boot extends Phaser.Scene {
@@ -24,7 +25,8 @@ export class Boot extends Phaser.Scene {
     setMuted(save.settings.muted);
     events.on('settings:changed', (s) => setMuted(s.muted));
     events.emit('settings:changed', { ...save.settings });
+    initLocalSettings();
 
-    this.scene.start('Game');
+    this.scene.start('Menu');
   }
 }

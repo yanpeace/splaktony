@@ -4,6 +4,8 @@ import { hex, C } from './config/palette';
 import { Boot } from './scenes/Boot';
 import { Game } from './scenes/Game';
 import { Shop } from './scenes/Shop';
+import { Menu } from './scenes/Menu';
+import { Settings, registerServiceWorker } from './scenes/Settings';
 import { UI } from './scenes/UI';
 import { ProgressHUD } from './scenes/ProgressHUD';
 
@@ -33,8 +35,10 @@ const game = new Phaser.Game({
       debug: false,
     },
   },
-  scene: [Boot, Game, UI, ProgressHUD, Shop],
+  scene: [Boot, Menu, Game, UI, ProgressHUD, Shop, Settings],
 });
+
+registerServiceWorker();
 
 // utile per il debug da console: window.game
 (window as unknown as { game: Phaser.Game }).game = game;
