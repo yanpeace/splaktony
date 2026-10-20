@@ -627,3 +627,72 @@ export const CRASH = {
   /** scritta "SBAM!" + monete */
   textMs: 1700,
 } as const;
+
+// ---- MONDO 2: galleria ----
+
+/**
+ * Interno della galleria (entities/TunnelWorld.ts): solo grafica e suoni
+ * ambientali dietro Tony, tutto a scatti. Tempi in ms, velocità in unità
+ * "mondo" della prospettiva (1 = 1 px a profondità z = 1) al secondo.
+ */
+export const TUNNEL_WORLD = {
+  /** talpa: un frame della testa fresante ogni cutterFrameMs mentre scava */
+  cutterFrameMs: 110,
+  /** scavo continuo per runMinMs..runMaxMs, poi sosta pauseMinMs..pauseMaxMs */
+  runMinMs: 9000,
+  runMaxMs: 15000,
+  pauseMinMs: 1800,
+  pauseMaxMs: 3200,
+  /** vibrazione: ogni vibrateMs la macchina si sposta di ±1px con probabilità vibrateChance */
+  vibrateMs: 70,
+  vibrateChance: 0.35,
+  /** spinta: la macchina avanza di 1px per thrustMs, poi torna indietro (ciclo 2*thrustMs) */
+  thrustMs: 1300,
+  /** lampeggianti arancio sulla talpa (alternati) */
+  beaconMs: 340,
+  /** fumi: pool di sbuffi, uno ogni smokeMinMs..smokeMaxMs mentre scava (x3 in sosta) */
+  smokePool: 24,
+  smokeMinMs: 80,
+  smokeMaxMs: 200,
+  smokeStepMs: 110,
+  smokeSteps: 18,
+  /** scintille sul bordo della testa (spawnParticles) */
+  sparkMinMs: 250,
+  sparkMaxMs: 900,
+  /** nastro trasportatore: detriti in pool che scorrono verso chi guarda */
+  debrisPool: 10,
+  debrisSpeed: 70,
+  debrisStepMs: 50,
+  /** neon: ogni tanto uno sfarfalla (flickerMs, scatti flickerStepMinMs..Max) e, con offChance, resta spento */
+  neonEventMinMs: 3500,
+  neonEventMaxMs: 8000,
+  neonFlickerMs: 800,
+  neonFlickerStepMinMs: 40,
+  neonFlickerStepMaxMs: 110,
+  neonOffChance: 0.65,
+  neonOffMinMs: 1800,
+  neonOffMaxMs: 4500,
+  /** micro-lampeggio di un neon a caso (frame attenuato) */
+  neonBlinkMinMs: 900,
+  neonBlinkMaxMs: 2600,
+  neonBlinkMs: 60,
+  /** luce di emergenza vicino all'uscita: raffiche di emergencyBlinks lampi ogni emergencyMinMs..Max */
+  emergencyMinMs: 5000,
+  emergencyMaxMs: 11000,
+  emergencyBlinks: 6,
+  emergencyMs: 220,
+  /** vagonetto: fermate (profondità mondo) percorse in ciclo, sosta stopMinMs..stopMaxMs */
+  wagonStops: [240, 150, 240, 322] as readonly number[],
+  wagonSpeed: 55,
+  wagonStepMs: 50,
+  wagonStopMinMs: 4000,
+  wagonStopMaxMs: 9000,
+  wagonBeaconMs: 260,
+  /** operai lontani: cambio di posa */
+  workerMinMs: 500,
+  workerMaxMs: 1400,
+  /** ronzio della talpa ogni humMinMs..humMaxMs; bzz del neon al massimo ogni bzzMinGapMs */
+  humMinMs: 6000,
+  humMaxMs: 10000,
+  bzzMinGapMs: 120,
+} as const;
