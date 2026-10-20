@@ -5,113 +5,148 @@ import { makeSprites, type SpriteData } from './pixelSprite';
  * Sprite del gioco come array di stringhe (indici palette 0-f, '.' = vuoto).
  *   0 black 1 plum 2 red 3 orange 4 yellow 5 lime 6 green 7 teal
  *   8 navy 9 blue a sky b cyan c white d silver e slate f charcoal
+ *   g pink (#f2a7a0, solo per la pelle di Tony)
  * Le chiavi texture sono quelle di SPRITES; per sostituirle con immagini
  * Aseprite basta caricare un PNG con la stessa chiave in Boot.
  */
 
-// ------------------------------------------------------------ Tony: testa
-// 16x17: 2 righe di ciuffo di lana + faccia 16x15 (centro faccia = riga 9)
+// ------------------------------------------------------------ Tony: pelle
+// Tony è un operaio dalla pelle rosa. Le parti di pelle negli sprite sono
+// scritte con segnaposto ('s' base, 'h' ombra, 'l' luce) e skin() li converte
+// negli indici qui sotto: per cambiare carnagione basta cambiare le costanti.
+//   g #f2a7a0 rosa: 17° colore aggiunto a Sweetie 16 SOLO per la pelle
+//   3 #ef7d57 pesca: ombra calda, resta rosata accanto al rosa
+//   c #f4f4f4 bianco: riflessi
+const SKIN_BASE = 'g';
+const SKIN_SHADE = '3';
+const SKIN_LIGHT = 'c';
 
-const HEAD_TOP = ['.....1..1..1....', '......1.1.1.....', '....00000000....', '..003333333300..', '.03333333333330.'];
-const HEAD_SEAM = '.033e3e3e3e3330.';
-const HEAD_SEAM_SWEAT = '.033e3e3e3e3a30.';
-const HEAD_FOREHEAD = '0333333333333330';
-const HEAD_CHEEKS = '0322333333332230';
-const HEAD_BOTTOM = ['.03333333333330.', '..003333333300..', '....00000000....'];
+function skin(rows: SpriteData): SpriteData {
+  return rows.map((r) => r.replace(/s/g, SKIN_BASE).replace(/h/g, SKIN_SHADE).replace(/l/g, SKIN_LIGHT));
+}
+
+// ------------------------------------------------------------ Tony: testa
+// 16x17: caschetto giallo (righe 0-5, falda sporgente alla riga 5, bordo scuro
+// alla riga 6) + faccia sotto la falda.
+
+const HELMET = [
+  '.....000000.....',
+  '...004c444300...',
+  '..04c444444430..',
+  '.04c44444444330.',
+  '.04444444444330.',
+  '0444444444444330',
+];
+const BRIM_EDGE = '0000000000000000';
+const CHEEKS = '0shhsssssssshhs0';
+const CHEEKS_SWEAT = '0shhsssssssshha0';
+const CHIN = ['.0sssssssssssh0.', '..00sssssshh00..', '....00000000....'];
 
 type Rows3 = readonly [string, string, string];
 
-function head(eyes: Rows3, mouth: Rows3, seam = HEAD_SEAM): SpriteData {
-  return [...HEAD_TOP, seam, HEAD_FOREHEAD, ...eyes, HEAD_CHEEKS, ...mouth, ...HEAD_BOTTOM];
+function head(eyes: Rows3, mouth: Rows3, sweat = false): SpriteData {
+  return skin([
+    ...HELMET,
+    BRIM_EDGE,
+    ...eyes,
+    sweat ? CHEEKS_SWEAT : CHEEKS,
+    ...mouth,
+    ...CHIN,
+  ]);
 }
 
-/** origine Y della testa: centro della faccia (riga 9.5 su 17) */
+/** origine Y della testa: centro del cerchio fisico (riga 9.5 su 17, sotto la falda) */
 export const HEAD_ORIGIN_Y = 9.5 / 17;
 
-const EYES_BUTTON: Rows3 = ['0330003333000330', '0330c033330c0330', '0330003333000330'];
-const EYES_BLINK: Rows3 = ['0333333333333330', '0330003333000330', '0333333333333330'];
-const EYES_HURT: Rows3 = ['0330333333330330', '0333003333003330', '0330333333330330'];
-const EYES_DIZZY_A: Rows3 = ['0330303333030330', '0333033333303330', '0330303333030330'];
-const EYES_DIZZY_B: Rows3 = ['0333033333303330', '0330003333000330', '0333033333303330'];
+const EYES_OPEN: Rows3 = ['0hssssssssssssh0', '0ssc0ssssss0css0', '0ssc0ssssss0css0'];
+const EYES_BLINK: Rows3 = ['0hssssssssssssh0', '0ssssssssssssss0', '0ss00ssssss00ss0'];
+const EYES_HURT: Rows3 = ['0ss0ssssssss0sa0', '0sss00ssss00sss0', '0ss0ssssssss0ss0'];
+const EYES_DIZZY_A: Rows3 = ['0ss0s0ssss0s0ss0', '0sss0ssssss0sss0', '0ss0s0ssss0s0ss0'];
+const EYES_DIZZY_B: Rows3 = ['0sss0ssssss0sss0', '0ss000ssss000ss0', '0sss0ssssss0sss0'];
 
-const MOUTH_SMILE: Rows3 = ['0333303333033330', '0333330000333330', '0333333333333330'];
-const MOUTH_OUCH: Rows3 = ['0333330000333330', '0333302222033330', '0333330000333330'];
-const MOUTH_DIZZY: Rows3 = ['0333333333333330', '0333300000033330', '0333333322333330'];
+const MOUTH_SMILE: Rows3 = ['0ssss0ssss0ssss0', '0sssss0000sssss0', '0ssssssssssssss0'];
+const MOUTH_OUCH: Rows3 = ['0sssss0000sssss0', '0ssss022220ssss0', '0sssss0000sssss0'];
+const MOUTH_DIZZY: Rows3 = ['0ssssssssssssss0', '0ssss000000ssss0', '0sssssss22sssss0'];
 
 // ------------------------------------------------------------ Tony: corpo
+// Maglietta nera (f/0), pettorina gialla (4/3) con bande riflettenti (d/c)
+// e apertura centrale, cintura e jeans (9/8/a), scarpe antinfortunistiche.
 
 const TORSO: SpriteData = [
   '..0000000000..',
-  '.033333333330.',
-  '033e3e3e3e3330',
-  '03333333333330',
-  '02333333333320',
-  '02333333333320',
-  '02330000000320',
-  '02330c999c0320',
-  '023309a9990320',
-  '023309999a0320',
-  '02330c999c0320',
-  '02330000000320',
-  '02333333333320',
-  '09999999999990',
-  '09e9e9e9e9e9e0',
-  '09999999999990',
-  '09999999999990',
+  '.0444ffff4430.',
+  '0444ff00ff4430',
+  '04444ffff44430',
+  '04444ffff44430',
+  '0cdddffffdddd0',
+  '04444ffff44430',
+  '04444ffff44430',
+  '04444ffff44430',
+  '0cdddffffdddd0',
+  '04444ffff44430',
+  '04444ffff44330',
+  '03333ffff33330',
+  '0fffffddfffff0',
+  '09999999999980',
+  '0a999998999980',
+  '09999998999880',
   '.000000000000.',
 ];
 
+/** braccio superiore: bordo della pettorina, manica corta nera, pelle */
 const ARM_UPPER: SpriteData = [
   '.000.',
-  '03330',
-  '03330',
-  '03e30',
-  '03330',
-  '03330',
-  '03e30',
-  '03330',
-  '03330',
+  '04430',
+  '0fff0',
+  '0fff0',
+  '0fff0',
+  '00000',
+  '0lsh0',
+  '0ssh0',
+  '0ssh0',
   '.000.',
 ];
 
+/** avambraccio rosa + guanto da lavoro (polsino giallo) */
 const ARM_LOWER: SpriteData = [
   '.000.',
-  '03330',
-  '03330',
-  '03e30',
-  '03330',
-  '0e3e0',
-  '03330',
-  '03330',
-  '03330',
+  '0lsh0',
+  '0ssh0',
+  '0ssh0',
+  '0ssh0',
+  '0ssh0',
+  '04430',
+  '0dde0',
+  '0dde0',
   '.000.',
 ];
 
 const LEG_UPPER: SpriteData = [
   '.0000.',
-  '099990',
-  '099990',
-  '099e90',
-  '099990',
-  '099990',
-  '099990',
-  '09e990',
-  '099990',
-  '033330',
+  '099980',
+  '0a9980',
+  '0a9980',
+  '099980',
+  '099980',
+  '099980',
+  '099980',
+  '0a9980',
+  '099880',
   '.0000.',
 ];
 
+/** jeans con risvolto + scarpa antinfortunistica (lacci gialli, puntale) */
 const LEG_LOWER: SpriteData = [
   '.0000.',
-  '033330',
-  '033330',
-  '0cccc0',
-  '022220',
-  '0cccc0',
-  '022220',
-  '0cccc0',
+  '099980',
+  '0a9980',
+  '099980',
+  '099980',
+  '088880',
+  '0f44f0',
   '0ffff0',
-  '0ffff0',
+  '0ddef0',
+  '0eeef0',
   '0ffff0',
   '.0000.',
 ];
@@ -220,14 +255,14 @@ const SPEAKER_OFF: SpriteData = [
 ];
 
 export const SPRITES = {
-  'tony-head': head(EYES_BUTTON, MOUTH_SMILE),
+  'tony-head': head(EYES_OPEN, MOUTH_SMILE),
   'tony-head-blink': head(EYES_BLINK, MOUTH_SMILE),
-  'tony-head-hurt': head(EYES_HURT, MOUTH_OUCH, HEAD_SEAM_SWEAT),
+  'tony-head-hurt': head(EYES_HURT, MOUTH_OUCH, true),
   'tony-head-dizzy-a': head(EYES_DIZZY_A, MOUTH_DIZZY),
   'tony-head-dizzy-b': head(EYES_DIZZY_B, MOUTH_DIZZY),
   'tony-torso': TORSO,
-  'tony-arm-upper': ARM_UPPER,
-  'tony-arm-lower': ARM_LOWER,
+  'tony-arm-upper': skin(ARM_UPPER),
+  'tony-arm-lower': skin(ARM_LOWER),
   'tony-leg-upper': LEG_UPPER,
   'tony-leg-lower': LEG_LOWER,
   'fx-star-a': STAR_A,

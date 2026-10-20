@@ -21,8 +21,9 @@ npm run build
 
 1. **Risoluzione logica 180x320** (verticale), `pixelArt`, `roundPixels`,
    `Scale.FIT`. Posizioni a schermo sempre intere (`Math.round`).
-2. **Solo la palette Sweetie 16** (`src/config/palette.ts`). Nel codice usa
-   `C.<nome>` + `col()` (intero) o `hex()` (CSS). Mai colori letterali.
+2. **Solo la palette Sweetie 16 + 1 rosa pelle** (`src/config/palette.ts`).
+   Nel codice usa `C.<nome>` + `col()` (intero) o `hex()` (CSS). Mai colori
+   letterali. L'indice 16 (`g`, `C.pink`) è riservato alla pelle di Tony.
 3. **Niente asset esterni**: sprite da stringhe (`gfx/pixelSprite.ts`), font
    da codice (`gfx/pixelFont.ts`), audio Web Audio (`audio/sfx.ts`).
 4. **Tutti i numeri di gameplay stanno in `src/config/balance.ts`**:
@@ -48,7 +49,7 @@ src/
   config/
     balance.ts          TUTTI i numeri (SCREEN, ROOM, PHYSICS, RAGDOLL, GRAB,
                         DAMAGE, ECONOMY, MOOD, FX, WEAPON_STATS)
-    palette.ts          Sweetie 16: PALETTE_HEX, C, col(), hex()
+    palette.ts          Sweetie 16 + rosa pelle: PALETTE_HEX, C, col(), hex()
   gfx/
     pixelSprite.ts      SpriteData (string[]) → texture: makeSprite/makeSprites
     sprites.ts          sprite di Tony, stanza e UI + registerSprites()
@@ -252,13 +253,17 @@ makeSprite(scene, 'icon-bat', ICON);
 
 Legenda: `0` black `1` plum `2` red `3` orange `4` yellow `5` lime `6` green
 `7` teal `8` navy `9` blue `a` sky `b` cyan `c` white `d` silver `e` slate
-`f` charcoal. Contorno scuro `0` attorno agli oggetti. Animazioni: 2-4
+`f` charcoal, più `g` pink (#f2a7a0, indice 16) **solo per la pelle**.
+Contorno scuro `0` attorno agli oggetti. Animazioni: 2-4
 texture distinte (`fx-pow`, `fx-pow-small`...). Per passare agli sprite
 Aseprite: aggiungi un `preload()` in `Boot` che carica un PNG con la stessa chiave (`makeSprite` salta le chiavi già esistenti).
 
-Tony: testa 16x17 (con ciuffo; faccia `tony-head`, `-blink`, `-hurt`,
-`-dizzy-a/b`), busto 14x18 con toppa blu, braccia 5x10 (2 pezzi),
-gambe 6x11 + 6x12 (2 pezzi).
+Tony (operaio): testa 16x17 (caschetto giallo; faccia `tony-head`, `-blink`,
+`-hurt`, `-dizzy-a/b`), busto 14x18 (maglietta nera + pettorina gialla,
+cintura e jeans), braccia 5x10 (manica + avambraccio con guanto), gambe
+6x11 + 6x12 (jeans + scarpa antinfortunistica). La pelle negli sprite usa i
+segnaposto `s`/`h`/`l` convertiti da `skin()` (costanti `SKIN_*` in
+`gfx/sprites.ts`).
 
 ---
 
