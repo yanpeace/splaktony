@@ -113,8 +113,9 @@ export class Menu extends Phaser.Scene {
     this.input.once(Phaser.Input.Events.POINTER_DOWN, () => unlockAudio());
 
     this.buildBackground();
-    this.buildTitle();
+    // l'altalena prima del titolo: le corde passano dietro la scritta
     this.buildSwing();
+    this.buildTitle();
     this.buildButtons();
   }
 
@@ -171,22 +172,22 @@ export class Menu extends Phaser.Scene {
 
   private buildSwing(): void {
     const ax = SCREEN.width / 2;
-    const ay = 74;
+    const ay = MENU.swingPivotY;
     const L = MENU.swingRope;
 
-    // trave fissa con due ganci
-    const beam = this.add.graphics();
-    drawPanel(beam, ax - 34, ay - 5, 68, 6, { fill: C.plum, highlight: C.red, shadow: C.black });
-
+    // appesa a qualcosa fuori schermo: le corde di rame salgono ed escono dal bordo alto
     const swing = this.add.container(ax, ay);
     const g = this.add.graphics();
-    // corde
-    g.fillStyle(col(C.silver));
-    g.fillRect(-12, 0, 1, L);
-    g.fillRect(11, 0, 1, L);
+    for (const rx of [-12, 10]) drawCopperRope(g, rx, 0, L);
     swing.add(g);
 
-    // gambe che penzolano (sotto il sedile)
+    // sedile
+    const seat = this.add.graphics();
+    drawPanel(seat, -16, L, 32, 4, { fill: C.red, highlight: C.orange, shadow: C.black });
+    swing.add(seat);
+
+    // busto dietro, poi le gambe che penzolano DAVANTI al sedile
+    swing.add(this.add.image(0, L, 'tony-torso').setOrigin(0.5, 1));
     const legs: Phaser.GameObjects.Image[] = [];
     for (const side of [-1, 1]) {
       const lx = side * 4;
@@ -195,14 +196,6 @@ export class Menu extends Phaser.Scene {
       legs.push(lower);
       swing.add(lower);
     }
-
-    // sedile
-    const seat = this.add.graphics();
-    drawPanel(seat, -16, L, 32, 4, { fill: C.red, highlight: C.orange, shadow: C.black });
-    swing.add(seat);
-
-    // busto e testa
-    swing.add(this.add.image(0, L, 'tony-torso').setOrigin(0.5, 1));
     const head = this.add.image(0, L - 17, 'tony-head').setOrigin(0.5, 1);
     swing.add(head);
 
@@ -372,4 +365,17 @@ function lockPortrait(): void {
   } catch {
     /* non supportato */
   }
+}
+
+/** Corda di rame 2px intrecciata: rame chiaro/scuro con riflessi che girano a spirale. */
+function drawCopperRope(g: Phaser.GameObjects.Graphics, x: number, y0: number, len: number): void {
+  g.fillStyle(col(C.orange));
+  g.fillRect(x, y0, 1, len);
+  g.fillStyle(col(C.red));
+  g.fillRect(x + 1, y0, 1, len);
+  // trefoli: ogni 4px un riflesso giallo che passa da una fibra all'altra
+  g.fillStyle(col(C.yellow));
+  for (let y = y0; y < y0 + len; y += 4) g.fillRect(x + ((y >> 2) & 1), y, 1, 1);
+  g.fillStyle(col(C.plum));
+  for (let y = y0 + 2; y < y0 + len; y += 4) g.fillRect(x + 1 - ((y >> 2) & 1), y, 1, 1);
 }

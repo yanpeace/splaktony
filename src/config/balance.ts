@@ -506,13 +506,15 @@ export const MENU = {
   titleScale: 3,
   /** altalena di Tony: durata di un frame e passo della rotazione */
   swingFrameMs: 130,
-  swingStepDeg: 4,
+  swingStepDeg: 2,
   /** posizioni per lato (±swingSteps * swingStepDeg) */
   swingSteps: 2,
   /** frame per un'oscillazione completa */
   swingPeriodFrames: 12,
-  /** lunghezza delle corde dell'altalena (px) */
-  swingRope: 96,
+  /** lunghezza delle corde dell'altalena (px): partono da sopra lo schermo */
+  swingRope: 214,
+  /** perno dell'altalena: fuori dallo schermo, sopra il titolo (le corde "spariscono" in alto) */
+  swingPivotY: -44,
   /** vibrazione sui colpi forti (ms) */
   vibrateMs: 30,
 } as const;
