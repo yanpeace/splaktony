@@ -293,9 +293,10 @@ export function bindTunnelDeep(scene: Phaser.Scene): void {
     scene.add.image(Math.round(x), Math.round(y), key).setOrigin(0).setDepth(depth);
 
   // ---- velo: luce più calda e sporca sullo sfondo (Tony resta pulito, è sopra)
-  scene.add.rectangle(0, 0, TW.width, TW.groundY, col(C.black), S.moodDarkAlpha).setOrigin(0).setDepth(D_MOOD);
-  scene.add.rectangle(0, 0, TW.width, TW.groundY, col(C.red), S.moodWarmAlpha).setOrigin(0).setDepth(D_MOOD);
-  scene.add.rectangle(0, 0, TW.width, S.moodTopH, col(C.black), S.moodTopAlpha).setOrigin(0).setDepth(D_MOOD);
+  // (da TW.top: sugli schermi lunghi lo sfondo parte sopra lo 0)
+  scene.add.rectangle(0, TW.top, TW.width, TW.groundY - TW.top, col(C.black), S.moodDarkAlpha).setOrigin(0).setDepth(D_MOOD);
+  scene.add.rectangle(0, TW.top, TW.width, TW.groundY - TW.top, col(C.red), S.moodWarmAlpha).setOrigin(0).setDepth(D_MOOD);
+  scene.add.rectangle(0, TW.top, TW.width, S.moodTopH - TW.top, col(C.black), S.moodTopAlpha).setOrigin(0).setDepth(D_MOOD);
 
   // ---- pozzanghere nuove (disegnate una volta, in prospettiva, riga per riga)
   const pud = scene.add.graphics().setDepth(D_PUDDLE);
@@ -517,7 +518,7 @@ export function bindTunnelDeep(scene: Phaser.Scene): void {
   const motes: Mote[] = [];
   const resetMote = (m: Mote, anywhere: boolean) => {
     m.x = rand(4, TW.width - 4);
-    m.y = anywhere ? rand(40, TW.groundY - 6) : TW.groundY - 6;
+    m.y = anywhere ? rand(40 + TW.top, TW.groundY - 6) : TW.groundY - 6;
     m.dx = Math.random() < 0.5 ? -1 : 1;
   };
   for (let i = 0; i < S.motePool; i++) {
@@ -766,7 +767,7 @@ export function bindTunnelDeep(scene: Phaser.Scene): void {
         m.y -= Math.random() < 0.5 ? 1 : 0;
         if (Math.random() < 0.3) m.x += m.dx;
         if (Math.random() < 0.05) m.dx = -m.dx;
-        if (m.y < 36 || m.x < 1 || m.x > TW.width - 2) resetMote(m, false);
+        if (m.y < 36 + TW.top || m.x < 1 || m.x > TW.width - 2) resetMote(m, false);
         m.rect.setPosition(Math.round(m.x), Math.round(m.y));
       }
     }

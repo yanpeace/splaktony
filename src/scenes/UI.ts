@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { JUICE, ROOM_INNER, SCREEN } from '../config/balance';
+import { JUICE, ROOM, SCREEN } from '../config/balance';
 import { C } from '../config/palette';
 import { bindFlyingCoins } from '../gfx/juice';
 import { formatCompact, measureText, pixelText, setPixelText } from '../gfx/pixelFont';
@@ -22,29 +22,31 @@ export class UI extends Phaser.Scene {
 
   create(): void {
     const g = this.add.graphics();
+    // riga in alto sotto il notch; le cose in basso si ancorano al bordo basso dello schermo
+    const top = SCREEN.safeTop;
 
     // --- danno totale
-    drawPanel(g, 3, 3, 82, 13);
-    pixelText(this, 6, 5, 'DANNO', C.silver);
-    const dmgText = pixelText(this, 82, 5, '0', C.white).setOrigin(1, 0);
+    drawPanel(g, 3, top + 3, 82, 13);
+    pixelText(this, 6, top + 5, 'DANNO', C.silver);
+    const dmgText = pixelText(this, 82, top + 5, '0', C.white).setOrigin(1, 0);
 
     // --- monete
-    drawPanel(g, 88, 3, 67, 13);
-    const coinIcon = this.add.image(91, 6, 'ui-coin').setOrigin(0);
-    const coinText = pixelText(this, 152, 5, '0', C.yellow).setOrigin(1, 0);
+    drawPanel(g, 88, top + 3, 67, 13);
+    const coinIcon = this.add.image(91, top + 6, 'ui-coin').setOrigin(0);
+    const coinText = pixelText(this, 152, top + 5, '0', C.yellow).setOrigin(1, 0);
 
     // --- audio on/off
     const icon = this.add.image(0, 0, 'ui-speaker-on');
     let muted = getSave().settings.muted;
-    const muteBtn = new ArcadeButton(this, 158, 3, {
+    const muteBtn = new ArcadeButton(this, 158, top + 3, {
       w: 19,
       h: 13,
       content: icon,
       onClick: () => events.emit('settings:changed', { muted: !muted }),
     });
 
-    // --- arma attiva (in basso, sopra il pavimento)
-    const wy = ROOM_INNER.bottom + 8;
+    // --- arma attiva (in basso, sul pavimento; sopra l'indicatore home se c'è)
+    const wy = Math.min(SCREEN.height - ROOM.floor + 8, SCREEN.height - SCREEN.safeBottom - 17);
     drawPanel(g, 3, wy, 70, 15);
     const weaponIcon = this.add.image(5, wy + 3, '__DEFAULT').setOrigin(0).setVisible(false);
     const weaponName = pixelText(this, 17, wy + 3, '', C.white);
@@ -120,8 +122,8 @@ export class UI extends Phaser.Scene {
     }
 
     // --- suggerimento iniziale lampeggiante
-    const hint = pixelText(this, SCREEN.width / 2, 250, 'TOCCA TONY!', C.yellow).setOrigin(0.5, 0);
-    const hint2 = pixelText(this, SCREEN.width / 2, 261, 'TRASCINA E LANCIA', C.silver).setOrigin(0.5, 0);
+    const hint = pixelText(this, SCREEN.width / 2, SCREEN.extra + 250, 'TOCCA TONY!', C.yellow).setOrigin(0.5, 0);
+    const hint2 = pixelText(this, SCREEN.width / 2, SCREEN.extra + 261, 'TRASCINA E LANCIA', C.silver).setOrigin(0.5, 0);
     const blink = this.time.addEvent({
       delay: 400,
       loop: true,
@@ -139,19 +141,19 @@ export class UI extends Phaser.Scene {
     // "bump" di 2px del contatore e dell'icona, poi torna giù a scatti
     let bump: Phaser.Time.TimerEvent | null = null;
     const bumpCoins = () => {
-      coinText.y = 3;
-      coinIcon.y = 4;
+      coinText.y = top + 3;
+      coinIcon.y = top + 4;
       bump?.remove();
       bump = this.time.delayedCall(JUICE.coinBumpMs, () => {
-        coinText.y = 4;
-        coinIcon.y = 5;
+        coinText.y = top + 4;
+        coinIcon.y = top + 5;
         bump = this.time.delayedCall(JUICE.coinBumpMs, () => {
-          coinText.y = 5;
-          coinIcon.y = 6;
+          coinText.y = top + 5;
+          coinIcon.y = top + 6;
         });
       });
     };
-    this.subs.add(bindFlyingCoins(this, { x: 94, y: 9, onArrive: bumpCoins }));
+    this.subs.add(bindFlyingCoins(this, { x: 94, y: top + 9, onArrive: bumpCoins }));
     this.subs
       .on('coins:changed', (e) => setPixelText(coinText, formatCompact(e.coins)), true)
       .on('damage:total', (e) => setPixelText(dmgText, formatCompact(e.total)), true)

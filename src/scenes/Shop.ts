@@ -70,14 +70,17 @@ const ROW_X = 3;
 const ROW_W = SCREEN.width - 6;
 const ROW_H = 40;
 const ROW_GAP = 2;
-const LIST_Y = 20;
-const PER_PAGE = 6;
+/** riga in alto sotto il notch; il piede si ancora al bordo basso dello schermo */
+const HEAD_Y = SCREEN.safeTop + 3;
+const LIST_Y = HEAD_Y + 17;
 const ICON_BOX = 24;
 const UP_W = 52;
 const UP_H = 14;
-const FOOT_Y = 300;
-const TOAST_Y = 276;
-const PAGE_Y = 288;
+const FOOT_Y = SCREEN.height - SCREEN.safeBottom - 20;
+const TOAST_Y = FOOT_Y - 24;
+const PAGE_Y = FOOT_Y - 12;
+/** righe per pagina: quante ne entrano tra intestazione e piede (6 su 180x320, di più sugli schermi lunghi) */
+const PER_PAGE = Math.max(6, Math.floor((TOAST_Y - 3 - LIST_Y + ROW_GAP) / (ROW_H + ROW_GAP)));
 
 /**
  * Allinea l'area di tocco di un ArcadeButton al riquadro disegnato.
@@ -135,11 +138,11 @@ export class Shop extends Phaser.Scene {
 
     // intestazione: titolo + monete + chiudi
     const g = this.add.graphics();
-    drawPanel(g, 3, 3, 152, 13);
-    pixelText(this, 6, 5, 'NEGOZIO', C.yellow);
-    this.add.image(91, 6, 'ui-coin').setOrigin(0);
-    const coinText = pixelText(this, 152, 5, '0', C.yellow).setOrigin(1, 0);
-    alignButtonHit(new ArcadeButton(this, 158, 3, {
+    drawPanel(g, 3, HEAD_Y, 152, 13);
+    pixelText(this, 6, HEAD_Y + 2, 'NEGOZIO', C.yellow);
+    this.add.image(91, HEAD_Y + 3, 'ui-coin').setOrigin(0);
+    const coinText = pixelText(this, 152, HEAD_Y + 2, '0', C.yellow).setOrigin(1, 0);
+    alignButtonHit(new ArcadeButton(this, 158, HEAD_Y, {
       w: 19,
       h: 13,
       fill: C.red,

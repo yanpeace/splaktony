@@ -202,7 +202,7 @@ export function buildTunnelWorld(scene: Phaser.Scene, opts: { world: 2 | 3 } = {
     scene.add.image(Math.round(x), Math.round(y), key).setOrigin(0).setDepth(depth);
 
   // ---- sfondo statico
-  add(0, 0, 'tw-bg', 0);
+  add(bd.bg.x, bd.bg.y, 'tw-bg', 0); // y < 0 sugli schermi lunghi: la volta continua sopra
 
   // ---- neon + maschere d'ombra
   const neons: Neon[] = LAMPS.map((_, i) => {

@@ -19,6 +19,8 @@ const game = new Phaser.Game({
   pixelArt: true,
   roundPixels: true,
   antialias: false,
+  // altezza logica dal rapporto dello schermo (config/screen.ts): sui telefoni
+  // lunghi niente bande nere; su finestre più larghe di 9:16 FIT mette le bande ai lati
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -44,6 +46,22 @@ const game = new Phaser.Game({
 });
 
 registerServiceWorker();
+
+/** Overlay #crt (index.html) sopra l'area reale del canvas: una riga scura per pixel logico. */
+function syncCrt(): void {
+  const crt = document.getElementById('crt');
+  if (!crt || !game.canvas) return;
+  const r = game.canvas.getBoundingClientRect();
+  crt.style.left = `${r.left}px`;
+  crt.style.top = `${r.top}px`;
+  crt.style.width = `${r.width}px`;
+  crt.style.height = `${r.height}px`;
+  crt.style.backgroundSize = `100% ${r.height / SCREEN.height}px`;
+}
+game.events.once(Phaser.Core.Events.READY, syncCrt);
+game.scale.on(Phaser.Scale.Events.RESIZE, syncCrt);
+// Scale.FIT ridimensiona il canvas al frame dopo il resize della finestra
+window.addEventListener('resize', () => requestAnimationFrame(syncCrt));
 
 // utile per il debug da console: window.game
 (window as unknown as { game: Phaser.Game }).game = game;
