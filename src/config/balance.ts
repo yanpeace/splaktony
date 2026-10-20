@@ -2127,3 +2127,33 @@ export const SPRITZ = {
   fireworks: 12,
   fireworkEveryMs: 170,
 } as const;
+
+/**
+ * Menu rapido dell'HUD (scenes/UI.ts): un pulsantino in alto a sinistra con
+ * l'icona dell'arma apre un pannello (arma, MENU, NEGOZIO, SPRITZ) e la
+ * griglia delle armi possedute. Il fondo dello schermo resta libero per Tony.
+ */
+export const HUD_MENU = {
+  /** pulsante che apre il menu (sotto "LV", sopra il resto del gioco) */
+  toggle: { x: 3, dy: 35, w: 30, h: 18 },
+  /** pannello: larghezza, altezza e distanza delle righe */
+  panelW: 84,
+  rowH: 16,
+  rowGap: 2,
+  /** griglia armi: colonne, celle e spazio tra le celle */
+  pickCols: 5,
+  cellW: 32,
+  cellH: 26,
+  cellGap: 2,
+  /** righe di griglia massime per pagina (meno se lo schermo è corto) */
+  pickMaxRows: 6,
+  /** si chiude da solo dopo questo tempo senza tocchi sul menu */
+  autoCloseMs: 5000,
+  /** tieni premuto il pulsante: apre subito la griglia armi */
+  longPressMs: 380,
+  /** entrata a scatti: frazione di larghezza ancora fuori a ogni frame */
+  slideSteps: [0.6, 0.25, 0],
+  slideStepMs: 40,
+  /** lampeggio del pulsante SPRITZ mai provato */
+  pulseMs: 500,
+} as const;
