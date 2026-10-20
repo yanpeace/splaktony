@@ -8,6 +8,7 @@ import { Menu } from './scenes/Menu';
 import { Settings, registerServiceWorker } from './scenes/Settings';
 import { UI } from './scenes/UI';
 import { ProgressHUD } from './scenes/ProgressHUD';
+import { Spritz } from './scenes/Spritz';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -39,7 +40,7 @@ const game = new Phaser.Game({
       debug: false,
     },
   },
-  scene: [Boot, Menu, Game, UI, ProgressHUD, Shop, Settings],
+  scene: [Boot, Menu, Game, UI, ProgressHUD, Spritz, Shop, Settings],
 });
 
 registerServiceWorker();

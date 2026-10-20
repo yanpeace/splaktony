@@ -1,11 +1,11 @@
-import { COMBO, DAILY, ECONOMY, PROGRESSION } from '../config/balance';
+import { COMBO, DAILY, ECONOMY, PROGRESSION, SPRITZ } from '../config/balance';
 import { economy } from './economy';
 import { events, type DamageEvent } from './events';
 import { getSave, patchSave } from './save';
 
 /**
  * Progressione (feature E): esperienza/livelli, combo di monete e obiettivi
- * giornalieri. Ascolta SOLO 'damage', emette 'level:up' e dà i premi con
+ * giornalieri. Ascolta 'damage' (e 'spritz:done' per l'XP del minigioco), emette 'level:up' e dà i premi con
  * economy.add(). La HUD (scenes/ProgressHUD.ts) legge lo stato da qui.
  *
  * - XP e livello stanno nel save condiviso (campi `xp`, `level`).
@@ -287,7 +287,7 @@ function notify(n: ProgressNotice): void {
 
 // ---------------------------------------------------------------- init
 
-/** Ripristina livello/XP dal save e si iscrive a 'damage'. Chiamato una volta da Boot. */
+/** Ripristina livello/XP dal save e si iscrive a 'damage' e 'spritz:done'. Chiamato una volta da Boot. */
 export function initProgression(): void {
   if (ready) return;
   ready = true;
@@ -307,6 +307,8 @@ export function initProgression(): void {
     const mult = comboHit(e.amount);
     updateGoals(e, mult);
   });
+  // minigioco SPRITZ completato: una bella fetta del livello corrente
+  events.on('spritz:done', () => addXp(Math.round(xpForLevel(level) * SPRITZ.xpLevelFraction)));
   window.addEventListener('pagehide', flushDaily);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushDaily();
