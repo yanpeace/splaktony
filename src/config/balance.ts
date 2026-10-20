@@ -1954,7 +1954,7 @@ export const SPRITZ = {
   regionSectors: 8,
   regionRings: [72, 100] as readonly number[],
   /** una zona coperta a questa frazione si completa da sola (niente caccia all'ultimo pixel) */
-  regionAutoFill: 0.85,
+  regionAutoFill: 0.8,
   /** blocchi di roccia sporgente che vogliono più cemento */
   chunks: 6,
   /** distanza minima dal punto di fuga e tra due blocchi (px) */
