@@ -7,7 +7,8 @@ import { buildRoom, buildRoomBodies } from '../entities/Room';
 import { bindSiteAmbient } from '../entities/SiteAmbient';
 import { bindCarCrash, driveIntoTunnel } from '../entities/CarCrash';
 import { TUNNEL } from '../entities/siteLayout';
-import { buildTunnelWorld } from '../entities/TunnelWorld';
+import { buildTunnelWorld, TUNNEL_WORLD_FOCUS } from '../entities/TunnelWorld';
+import { tunnelBackdrop } from '../gfx/tunnelSprites';
 import { isFrozen } from '../gfx/effects';
 import { dealDamage } from '../systems/damage';
 import { events, Subscriptions } from '../systems/events';
@@ -126,7 +127,11 @@ export class Game extends Phaser.Scene {
     this.scene.launch('UI');
     this.scene.launch('ProgressHUD');
 
-    if (intro) this.time.delayedCall(WORLDS.introDelayMs, () => driveIntoTunnel(this, () => this.enterTunnel()));
+    if (intro) {
+      // lo sfondo della galleria (~60 ms, poi in cache) si prepara durante l'attesa, non allo zoom
+      this.time.delayedCall(1000, () => tunnelBackdrop());
+      this.time.delayedCall(WORLDS.introDelayMs, () => driveIntoTunnel(this, () => this.enterTunnel()));
+    }
     if (this.worldId === 2) this.arriveInTunnel();
   }
 
@@ -159,7 +164,8 @@ export class Game extends Phaser.Scene {
   private arriveInTunnel(): void {
     const cam = this.cameras.main;
     const black = PALETTE_INT[C.black];
-    cam.setOrigin(ZOOM_FOCUS.x, ZOOM_FOCUS.y).setZoom(WORLDS.zoomOut[0]);
+    // si "esce" dalla talpa in fondo alla galleria
+    cam.setOrigin(TUNNEL_WORLD_FOCUS.x / SCREEN.width, TUNNEL_WORLD_FOCUS.y / SCREEN.height).setZoom(WORLDS.zoomOut[0]);
     cam.fadeIn(WORLDS.fadeInMs, (black >> 16) & 0xff, (black >> 8) & 0xff, black & 0xff);
     this.stepZoom(WORLDS.zoomOut.slice(1), () => cam.setZoom(1).setOrigin(0.5));
   }
