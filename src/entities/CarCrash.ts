@@ -8,7 +8,7 @@ import { makeSprite, type SpriteData } from '../gfx/pixelSprite';
 import { economy } from '../systems/economy';
 import { Subscriptions } from '../systems/events';
 import { getCombo, getLevel } from '../systems/progression';
-import { CRASH_LEAVE_Z, roadAt, TREE } from './siteLayout';
+import { CRASH_LEAVE_Z, roadAt, TREE, TUNNEL, Z_FAR } from './siteLayout';
 
 /**
  * Cantiere della galleria: l'albero (piccolo, lontano, sempre visibile) e l'incidente.
@@ -29,8 +29,15 @@ import { CRASH_LEAVE_Z, roadAt, TREE } from './siteLayout';
  * Tutto si muove a scatti di pixel interi, a "frame" da CRASH.frameMs.
  * Il tempo segue scene.time.timeScale (utile per rallentare e debuggare).
  *
- * Uso: bindCarCrash(scene) in Game.create(), dopo buildRoom.
- * Debug da console: window.carCrash.trigger() (o triggerCarCrash(scene)).
+ * Variante "galleria" (intro del mondo 2): driveIntoTunnel(scene, onInside)
+ * fa salire l'auto lungo la strada senza uscire a CRASH_LEAVE_Z: segue
+ * roadAt(z) fino a Z_FAR, rimpicciolisce, diventa una sagoma nel buio della
+ * bocca e sparisce con un lampo dei fanali; onInside() parte quando entra.
+ *
+ * Uso: bindCarCrash(scene) in Game.create(), dopo buildRoom
+ * (bindCarCrash(scene, { auto: false }) = niente incidenti automatici).
+ * Debug da console: window.carCrash.trigger() (o triggerCarCrash(scene)),
+ * window.carCrash.tunnel() = auto nella galleria.
  */
 
 // ---------------------------------------------------------------- depth
@@ -365,13 +372,20 @@ function sndHorn(long: boolean): void {
   tone({ type: 'square', from: 494, dur, vol: 0.05 });
 }
 
+/** l'auto entra nella galleria: rombo che rimbomba */
+function sndTunnel(): void {
+  tone({ type: 'triangle', from: 110, to: 45, dur: 0.6, vol: 0.3 });
+  tone({ type: 'square', from: 70, to: 40, dur: 0.5, vol: 0.08, delay: 0.12 });
+  noise({ dur: 0.5, vol: 0.12, freq: 800, freqTo: 200, delay: 0.05 });
+}
+
 function sndVanish(): void {
   tone({ type: 'square', from: 600, to: 200, dur: 0.1, vol: 0.06 });
 }
 
 // ---------------------------------------------------------------- incidente
 
-type Phase = 'idle' | 'wait' | 'enter' | 'skid' | 'smoke' | 'leave';
+type Phase = 'idle' | 'wait' | 'enter' | 'skid' | 'smoke' | 'leave' | 'tunnel' | 'tunnelIn';
 
 interface Puff {
   img: Phaser.GameObjects.Image;
@@ -392,6 +406,10 @@ export class CarCrash {
   private readonly tree: Phaser.GameObjects.Image;
   private readonly car: Phaser.GameObjects.Image;
   private readonly skidGfx: Phaser.GameObjects.Graphics;
+  /** lampo dei fanali dentro la bocca della galleria */
+  private readonly flashGfx: Phaser.GameObjects.Graphics;
+  /** callback di driveIntoTunnel: l'auto è entrata nella galleria */
+  private onInside: (() => void) | null = null;
   private readonly sbam: Phaser.GameObjects.BitmapText;
   private readonly sbamAlt: Phaser.GameObjects.BitmapText;
   private readonly coinsText: Phaser.GameObjects.BitmapText;
@@ -419,7 +437,7 @@ export class CarCrash {
   /** l'auto guarda a destra (vista di 3/4 specchiata) */
   private flip = false;
   /** taglia dell'auto ferma contro l'albero */
-  private crashSize: Size = 7;
+  private crashSize: Size = 10;
 
   private puffs: Puff[] = [];
   private treeSeq: number[] = [];
@@ -431,7 +449,14 @@ export class CarCrash {
   private comboSmall = false;
   private comboBig = false;
 
-  constructor(private readonly scene: Phaser.Scene) {
+  /**
+   * auto = false: gli eventi (combo, colpi forti, level up) non fanno partire
+   * l'incidente (intro del mondo 2); trigger di debug e driveIntoTunnel sì.
+   */
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly auto = true,
+  ) {
     ensureTextures(scene);
     const treeH = TREE_FILL.length;
     this.tree = scene.add
@@ -440,6 +465,7 @@ export class CarCrash {
       .setDepth(DEPTH_TREE);
     this.car = scene.add.image(0, 0, carKey(28, 'b', 0)).setOrigin(0).setDepth(DEPTH_CAR).setVisible(false);
     this.skidGfx = scene.add.graphics().setDepth(DEPTH_SKID);
+    this.flashGfx = scene.add.graphics().setDepth(DEPTH_CAR);
     // "SBAM!" sopra l'albero, dentro lo schermo
     const tw = 34; // mezza larghezza di "SBAM!" a scala 2 (circa)
     const tx = Phaser.Math.Clamp(TREE.x, tw, SCREEN.width - tw);
@@ -450,6 +476,7 @@ export class CarCrash {
     this.hideTexts();
 
     this.subs.on('damage', (e) => {
+      if (!this.auto) return;
       // progression ascolta 'damage' da Boot, quindi la combo è già aggiornata
       const c = getCombo();
       if (c.hits <= 1 || c.hits < this.comboHits) {
@@ -468,6 +495,7 @@ export class CarCrash {
       }
     });
     this.subs.on('level:up', (e) => {
+      if (!this.auto) return;
       if (e.level % CRASH.levelEvery === 0) this.tryTrigger(CRASH.levelUpDelayMs);
     });
 
@@ -499,6 +527,20 @@ export class CarCrash {
     } else {
       this.begin();
     }
+    return true;
+  }
+
+  /**
+   * L'auto sale lungo tutta la strada ed entra nella galleria (niente
+   * incidente). onInside() viene chiamata quando sparisce nella bocca.
+   * Ritorna false se un incidente è già in corso.
+   */
+  driveIntoTunnel(onInside?: () => void): boolean {
+    if (this.phase !== 'idle' && this.phase !== 'wait') return false;
+    this.lane = CRASH.lane;
+    this.begin();
+    this.setPhase('tunnel');
+    this.onInside = onInside ?? null;
     return true;
   }
 
@@ -628,6 +670,38 @@ export class CarCrash {
           depth: DEPTH_SMOKE,
         });
         if (u >= 1) this.impact();
+        break;
+      }
+      case 'tunnel': {
+        // come 'enter', ma senza uscire di strada: fino alla bocca (Z_FAR)
+        if (this.z >= CRASH.zAccelFrom) this.zSpeed = Math.min(CRASH.tunnelSpeedMax, this.zSpeed + CRASH.zAccel * dtS);
+        this.z = Math.min(Z_FAR, this.z + this.zSpeed * dtS);
+        this.wheel = this.wheel ? 0 : 1;
+        this.showCar(this.laneAt(this.z), this.heading(), this.z);
+        if (this.step % 2 === 1) sndEngine(2 + 3 * Math.min(1, (this.zSpeed - CRASH.zSpeed) / (CRASH.tunnelSpeedMax - CRASH.zSpeed)));
+        if (this.z >= Z_FAR) {
+          this.setPhase('tunnelIn');
+          sndTunnel();
+          const cb = this.onInside;
+          this.onInside = null;
+          cb?.();
+        }
+        break;
+      }
+      case 'tunnelIn': {
+        // sagoma sempre più scura nella bocca, poi il lampo dei fanali
+        const fade = CRASH.tunnelFadeFrames;
+        if (this.step <= fade) {
+          this.showCar(this.laneAt(Z_FAR), -Math.PI / 2, Z_FAR);
+          this.car.setTintFill(col(this.step < fade ? C.charcoal : C.black));
+        } else {
+          this.car.setVisible(false).clearTint();
+          this.drawHeadlightFlash(this.step - fade);
+        }
+        if (this.step > fade + CRASH.tunnelFlashFrames) {
+          this.flashGfx.clear();
+          this.finish(false);
+        }
         break;
       }
       case 'smoke': {
@@ -766,7 +840,32 @@ export class CarCrash {
     sndCrash();
   }
 
-  private finish(): void {
+  /** lampo dei fanali sul fondo della galleria (frame 1..CRASH.tunnelFlashFrames) */
+  private drawHeadlightFlash(f: number): void {
+    const g = this.flashGfx.clear();
+    const cx = TUNNEL.x;
+    const cy = TUNNEL.y - Math.round(TUNNEL.h * 0.3);
+    const px = (x: number, y: number, w: number, h: number, c: number) => {
+      g.fillStyle(col(c));
+      g.fillRect(cx + x, cy + y, w, h);
+    };
+    if (f === 1) {
+      // i due fanali che illuminano la parete
+      px(-3, 0, 2, 1, C.yellow);
+      px(1, 0, 2, 1, C.yellow);
+    } else if (f === 2) {
+      px(-5, -1, 10, 3, C.yellow);
+      px(-3, -2, 6, 5, C.yellow);
+      px(-2, -1, 4, 3, C.white);
+    } else if (f === 3) {
+      px(-3, -1, 6, 3, C.orange);
+      px(-1, 0, 2, 1, C.yellow);
+    } else {
+      px(-1, 0, 2, 1, C.orange);
+    }
+  }
+
+  private finish(sound = true): void {
     this.car.setVisible(false).clearTint();
     this.releaseAll();
     this.skidGfx.clear();
@@ -774,7 +873,7 @@ export class CarCrash {
     this.treeSeq = [];
     this.tree.setTexture(treeKey(0)).clearTint();
     this.setPhase('idle');
-    sndVanish();
+    if (sound) sndVanish();
   }
 
   // ---------------------------------------------------------------- dettagli
@@ -887,15 +986,16 @@ export class CarCrash {
 // ---------------------------------------------------------------- API
 
 /** Disegna l'albero e attiva gli incidenti nella scena (una riga in Game.create, dopo buildRoom). */
-export function bindCarCrash(scene: Phaser.Scene): CarCrash {
+export function bindCarCrash(scene: Phaser.Scene, opts: { auto?: boolean } = {}): CarCrash {
   instances.get(scene)?.destroy();
-  const c = new CarCrash(scene);
+  const c = new CarCrash(scene, opts.auto ?? true);
   instances.set(scene, c);
   // debug da console: carCrash.trigger(), carCrash.trigger(false) = corsia di sinistra
   (window as unknown as { carCrash: unknown }).carCrash = {
     owner: c,
     trigger: (fromRight?: boolean) => c.tryTrigger(0, true, fromRight),
     phase: () => c.currentPhase,
+    tunnel: () => c.driveIntoTunnel(),
   };
   return c;
 }
@@ -907,4 +1007,14 @@ export function bindCarCrash(scene: Phaser.Scene): CarCrash {
 export function triggerCarCrash(scene?: Phaser.Scene, fromRight?: boolean): boolean {
   const c = scene ? instances.get(scene) : [...instances.values()].pop();
   return c ? c.tryTrigger(0, true, fromRight) : false;
+}
+
+/**
+ * Intro del mondo 2: l'utilitaria sale lungo la strada ed entra nella galleria
+ * invece di schiantarsi. onInside() quando sparisce nella bocca (lì parte lo
+ * zoom). Senza CarCrash nella scena ne collega uno senza incidenti automatici.
+ */
+export function driveIntoTunnel(scene: Phaser.Scene, onInside?: () => void): boolean {
+  const c = instances.get(scene) ?? bindCarCrash(scene, { auto: false });
+  return c.driveIntoTunnel(onInside);
 }

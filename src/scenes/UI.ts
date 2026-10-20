@@ -62,6 +62,21 @@ export class UI extends Phaser.Scene {
       }),
     );
 
+    // --- torna al Menu (in basso al centro, tra arma e negozio: x 78..112)
+    const menuLabel = pixelText(this, 0, 0, 'MENU', C.white);
+    menuLabel.setPosition(-Math.floor(menuLabel.width / 2), -4);
+    alignButtonHit(
+      new ArcadeButton(this, 78, wy, {
+        w: 34,
+        h: 15,
+        content: this.add.container(0, 0, [menuLabel]),
+        onClick: () => {
+          for (const k of ['Shop', 'Settings', 'ProgressHUD', 'Game']) this.scene.stop(k);
+          this.scene.start('Menu'); // ferma anche UI
+        },
+      }),
+    );
+
     // --- suggerimento iniziale lampeggiante
     const hint = pixelText(this, SCREEN.width / 2, 250, 'TOCCA TONY!', C.yellow).setOrigin(0.5, 0);
     const hint2 = pixelText(this, SCREEN.width / 2, 261, 'TRASCINA E LANCIA', C.silver).setOrigin(0.5, 0);

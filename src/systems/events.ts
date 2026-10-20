@@ -60,6 +60,8 @@ export interface GameEvents {
   /** il giocatore ha preso / lasciato Tony */
   'ragdoll:grab': { part: PartName };
   'ragdoll:release': { part: PartName; vx: number; vy: number };
+  /** mondo scelto nel Menu (1 = cantiere, 2 = dentro la galleria). Emesso da scenes/Menu.ts → il save lo memorizza */
+  'world:changed': { world: 1 | 2 };
   /** impostazioni cambiate (UI → sfx, save) */
   'settings:changed': { muted: boolean };
 }

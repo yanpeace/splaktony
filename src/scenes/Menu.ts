@@ -1,16 +1,36 @@
 import Phaser from 'phaser';
-import { MENU, MOOD, SCREEN } from '../config/balance';
+import { MENU, MOOD, SCREEN, WORLDS } from '../config/balance';
 import { C, col, hex, type ColorIndex } from '../config/palette';
-import { unlockAudio } from '../audio/sfx';
+import { playError, unlockAudio } from '../audio/sfx';
 import { drawSiteBackdrop } from '../entities/Room';
 import { pixelText } from '../gfx/pixelFont';
+import { makeSprite, type SpriteData } from '../gfx/pixelSprite';
 import { ArcadeButton, drawPanel } from '../gfx/ui';
+import { events } from '../systems/events';
+import { getLevel } from '../systems/progression';
+import { getSave } from '../systems/save';
+import type { GameData, WorldId } from './Game';
 
 /**
  * Menu iniziale: titolo "SPLAK TONY" a lettere che saltano e cambiano colore
  * a scatti, Tony seduto su un'altalena che oscilla con rotazione quantizzata,
- * pulsanti GIOCA (→ Game, prova fullscreen + verticale) e IMPOSTAZIONI.
+ * pulsanti GIOCA (→ Game, prova fullscreen + verticale), scelta del mondo
+ * (MONDO 1 / MONDO 2, il 2 si sblocca a WORLDS.unlockLevel) e IMPOSTAZIONI.
+ * GIOCA col mondo 2 scelto: Game parte nel mondo 1 con l'intro (l'auto entra
+ * nella galleria e porta al mondo 2).
  */
+
+/** lucchetto 7x8 per il mondo bloccato */
+const LOCK: SpriteData = [
+  '..000..',
+  '.0ddd0.',
+  '.0d0d0.',
+  '0000000',
+  '0443440',
+  '0440440',
+  '0444440',
+  '0000000',
+];
 
 // glifi 5x7 del font (stessi di gfx/pixelFont.ts) per le sole lettere del titolo
 const TITLE_GLYPHS: Record<string, string> = {
@@ -253,7 +273,9 @@ export class Menu extends Phaser.Scene {
       callback: () => play.setVisible(!play.visible),
     });
 
-    new ArcadeButton(this, cx - 48, 248, {
+    this.buildWorldButtons(cx, 245);
+
+    new ArcadeButton(this, cx - 48, 266, {
       w: 96,
       h: 18,
       fill: C.blue,
@@ -262,12 +284,69 @@ export class Menu extends Phaser.Scene {
     });
   }
 
+  /** MONDO 1 / MONDO 2 affiancati sotto GIOCA; quello scelto è arancione. */
+  private buildWorldButtons(cx: number, y: number): void {
+    const w = 52;
+    const h = 15;
+    const unlocked = isWorld2Unlocked();
+    const buttons = new Map<WorldId, ArcadeButton>();
+    const refresh = () => {
+      const sel = selectedWorld();
+      for (const [id, b] of buttons) {
+        const locked = id === 2 && !unlocked;
+        b.setFill(locked ? C.charcoal : id === sel ? C.orange : C.slate);
+      }
+    };
+    for (const id of [1, 2] as const) {
+      const locked = id === 2 && !unlocked;
+      const parts: Phaser.GameObjects.GameObject[] = [];
+      if (locked) {
+        // lucchetto + "LV 5"
+        const lv = pixelText(this, 0, 0, `LV ${WORLDS.unlockLevel}`, C.silver);
+        const total = 7 + 2 + lv.width;
+        const x0 = -Math.floor(total / 2);
+        parts.push(this.add.image(x0, -4, makeSprite(this, 'ui-lock', LOCK)).setOrigin(0));
+        parts.push(lv.setPosition(x0 + 9, -4));
+      } else {
+        const t = pixelText(this, 0, 0, `MONDO ${id}`, C.white);
+        parts.push(t.setPosition(-Math.floor(t.width / 2), -4));
+      }
+      const b = new ArcadeButton(this, id === 1 ? cx - w - 2 : cx + 2, y, {
+        w,
+        h,
+        content: this.add.container(0, 0, parts),
+        sound: !locked,
+        onClick: () => {
+          if (locked) {
+            playError();
+            return;
+          }
+          if (selectedWorld() !== id) events.emit('world:changed', { world: id });
+          refresh();
+        },
+      });
+      buttons.set(id, b);
+    }
+    refresh();
+  }
+
   private startGame(): void {
     unlockAudio();
     goFullscreenPortrait();
     this.scene.stop('Settings');
-    this.scene.start('Game');
+    // mondo 2: si parte nel cantiere e l'auto ci porta dentro la galleria
+    const data: GameData = selectedWorld() === 2 ? { world: 1, intro: true } : { world: 1 };
+    this.scene.start('Game', data);
   }
+}
+
+function isWorld2Unlocked(): boolean {
+  return getLevel() >= WORLDS.unlockLevel;
+}
+
+/** mondo scelto (salvato); il 2 vale solo se sbloccato */
+function selectedWorld(): WorldId {
+  return getSave().world === 2 && isWorld2Unlocked() ? 2 : 1;
 }
 
 /** Schermo intero + verticale (se supportati, errori ignorati). */
