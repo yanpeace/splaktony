@@ -148,7 +148,13 @@ export function measureScreen(fit: ScreenFit, fb: SafeFallback): ScreenSize {
       const k = Math.min(iw / fit.width, ih / height);
       const safe = readSafeArea();
       const ios = iosFallback(fb, box);
-      const sTop = safe.top > 0 ? safe.top : ios.top;
+      // app da Home con barra di stato opaca: la pagina parte gia' sotto ora e
+      // batteria, ma iOS dichiara lo stesso env(safe-area-inset-top). Se la
+      // finestra piu' il margine arriva giusto al bordo dello schermo, la barra
+      // di stato sta FUORI dalla finestra: margine "fantasma", non conta.
+      const screenH = typeof screen !== 'undefined' ? Math.max(screen.width, screen.height) : 0;
+      const phantomTop = ih > iw && screenH > 0 && box.top + ih + safe.top <= screenH + 1;
+      const sTop = phantomTop ? 0 : safe.top > 0 ? safe.top : ios.top;
       const sBottom = safe.bottom > 0 ? safe.bottom : ios.bottom;
       // la parte di margine già coperta dalle bande (FIT) non conta
       const band = Math.max(0, (ih - height * k) / 2);
