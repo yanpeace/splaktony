@@ -36,30 +36,30 @@ export interface WeaponEntry {
 }
 
 export const WEAPON_REGISTRY: WeaponEntry[] = [
+  // in ordine di prezzo: è l'ordine del negozio
   { id: 'punch', create: (ctx) => new Punch(ctx) },
   { id: 'shuriken', create: (ctx) => new Shuriken(ctx) },
-  { id: 'coltello', create: (ctx) => new Coltello(ctx) },
-  { id: 'pistola', create: (ctx) => new Pistola(ctx) },
-  { id: 'mitragliatrice', create: (ctx) => new Mitragliatrice(ctx) },
-  { id: 'granata', create: (ctx) => new Granata(ctx) },
-  { id: 'dinamite', create: (ctx) => new Dinamite(ctx) },
   { id: 'piedediporco', create: (ctx) => new PiedeDiPorco(ctx) },
+  { id: 'coltello', create: (ctx) => new Coltello(ctx) },
   { id: 'mazza', create: (ctx) => new Mazza(ctx) },
-  { id: 'katana', create: (ctx) => new Katana(ctx) },
-  { id: 'motosega', create: (ctx) => new Motosega(ctx) },
+  { id: 'pistola', create: (ctx) => new Pistola(ctx) },
+  { id: 'doppietta', create: (ctx) => new Doppietta(ctx) },
+  { id: 'mitragliatrice', create: (ctx) => new Mitragliatrice(ctx) },
+  { id: 'fucile', create: (ctx) => new Fucile(ctx) },
   { id: 'lanciafiamme', create: (ctx) => new Lanciafiamme(ctx) },
+  { id: 'katana', create: (ctx) => new Katana(ctx) },
+  { id: 'granata', create: (ctx) => new Granata(ctx) },
   { id: 'fulmine', create: (ctx) => new Fulmine(ctx) },
   { id: 'ghiaccio', create: (ctx) => new Ghiaccio(ctx) },
+  { id: 'cecchino', create: (ctx) => new Cecchino(ctx) },
+  { id: 'dinamite', create: (ctx) => new Dinamite(ctx) },
+  { id: 'motosega', create: (ctx) => new Motosega(ctx) },
   { id: 'tornado', create: (ctx) => new Tornado(ctx) },
-  // ---- ARMI NUOVE: fantascienza ----
+  { id: 'rpg', create: (ctx) => new Rpg(ctx) },
   { id: 'minigun', create: (ctx) => new Minigun(ctx) },
   { id: 'raggio', create: (ctx) => new Raggio(ctx) },
   { id: 'plasma', create: (ctx) => new Plasma(ctx) },
   { id: 'gravita', create: (ctx) => new Gravita(ctx) },
-  { id: 'doppietta', create: (ctx) => new Doppietta(ctx) },
-  { id: 'fucile', create: (ctx) => new Fucile(ctx) },
-  { id: 'cecchino', create: (ctx) => new Cecchino(ctx) },
-  { id: 'rpg', create: (ctx) => new Rpg(ctx) },
 ];
 
 export function findWeapon(id: string): WeaponEntry | undefined {
