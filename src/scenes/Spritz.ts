@@ -3,7 +3,7 @@ import { SCREEN, SPRITZ } from '../config/balance';
 import { C, col, PALETTE_INT } from '../config/palette';
 import { noise, playCoin, playLevelUp, tone, unlockAudio } from '../audio/sfx';
 import { acquireImage, anchorBottom, popFrames, releaseImage, shake, spawnParticles } from '../gfx/effects';
-import { pixelText, setPixelText } from '../gfx/pixelFont';
+import { measureText, pixelText, setPixelText } from '../gfx/pixelFont';
 import {
   buildWallLayout,
   coatColor,
@@ -53,6 +53,25 @@ interface FlyCoin {
   y0: number;
   x1: number;
   y1: number;
+  /** monetina di una zona (va al riquadro premio e lo fa sobbalzare) */
+  small: boolean;
+}
+
+/** Scritta volante dal pool (parole delle zone, "+1%"): testo bianco tinto col colore voluto. */
+interface FloatText {
+  t: Phaser.GameObjects.BitmapText;
+  active: boolean;
+  start: number;
+  life: number;
+  x: number;
+  y: number;
+  /** pixel di salita in tutta la vita */
+  rise: number;
+  /** scala del "pop" iniziale e scala a riposo */
+  s0: number;
+  s1: number;
+  /** rotazione dei primi frame (scatto fumetto) */
+  rot: number;
 }
 
 const W = SCREEN.width;
@@ -64,11 +83,22 @@ const HUD_Y = SCREEN.top + SCREEN.safeTop;
 const tmpPoint = new Phaser.Math.Vector2();
 const COAT_KEY = 'sz-coat';
 /** profondità degli oggetti della scena */
-const D = { view: 0, chunk: 1, coat: 2, flash: 3, drip: 4, drop: 6, lance: 20, reticle: 21, hud: 30, text: 40, party: 60, wipe: 1000 } as const;
-/** impaginazione HUD (pixel interi) */
+const D = { view: 0, chunk: 1, coat: 2, flash: 3, drip: 4, drop: 6, lance: 20, reticle: 21, hud: 30, text: 40, banner: 50, party: 60, screenFlash: 90, wipe: 1000 } as const;
+/** impaginazione HUD (pixel interi): barra ancorata in alto (HUD_Y), riquadri in basso sopra l'indicatore home */
 const BAR = { x: 58, y: HUD_Y + 13, w: 82, h: 8 } as const;
-const GAUGE = { x: 3, y: 296 - SCREEN.safeBottom, w: 62, h: 21 } as const;
-const PRIZE = { x: 115, y: 296 - SCREEN.safeBottom, w: 62, h: 21 } as const;
+/** riga alta dei riquadri in basso (manometro, timer, premio) */
+const HUD_BOTTOM_Y = H - 24 - SCREEN.safeBottom;
+const GAUGE = { x: 3, w: 57, h: 21 } as const;
+const TIMER = { x: 62, w: 56, h: 21 } as const;
+const PRIZE = { x: 120, w: 57, h: 21 } as const;
+/** striscione dei traguardi / tempo scaduto e scritta della combo (sotto la barra in alto) */
+const BANNER = { y: HUD_Y + 50, h: 40 } as const;
+const COMBO_Y = HUD_Y + 31;
+/** colori delle parole delle zone, a giro con la combo */
+const WORD_COLORS = [C.lime, C.yellow, C.orange, C.cyan, C.white] as const;
+/** colori di coriandoli e fuochi */
+const CONFETTI = [C.yellow, C.lime, C.white, C.cyan, C.orange, C.red] as const;
+const CEMENT = [C.white, C.silver, C.slate] as const;
 
 /**
  * Minigioco SPRITZ (mondi 2 e 3): il giocatore è salito in cima alla talpa e
@@ -83,7 +113,13 @@ const PRIZE = { x: 115, y: 296 - SCREEN.safeBottom, w: 62, h: 21 } as const;
  *   strati per cella (quattro sui blocchi sporgenti); una zona angolare quasi
  *   piena si completa da sola con un "pop".
  * - La pompa ha una pressione che cala mentre spruzzi e si ricarica quando
- *   molli; a secco si aspetta SPRITZ.lockoutResume.
+ *   molli; a secco si aspetta SPRITZ.lockoutResume (raro: dura ~17 s).
+ * - Timer: SPRITZ.timerMs a ogni ingresso. Al 100% in tempo premio + bonus
+ *   tempo; scaduto → "TEMPO SCADUTO!", niente premio, ma si può finire la
+ *   parete ('spritz:done' con reward 0, niente XP).
+ * - Juice: parole fumetto e monetine a ogni zona, COMBO, "+1%" vicino al
+ *   getto, striscioni ogni SPRITZ.milestoneStep %, barra che si illumina,
+ *   festa finale con fuochi di cemento e pioggia di monete.
  * - Avanzamento: 'spritz:progress' ogni SPRITZ.saveEveryMs e all'uscita; al
  *   rientro la copertura salvata si ricostruisce a macchie (ordine
  *   deterministico). Al 100%: festa, economy.add(premio) e 'spritz:done'
@@ -146,6 +182,44 @@ export class Spritz extends Phaser.Scene {
   private nextHissAt = 0;
   private finishedAt = 0;
   private reward = 0;
+  /** riga alta dei riquadri in basso */
+  private hudY: number = HUD_BOTTOM_Y;
+  private timerWarned = false;
+
+  /** timer */
+  private timeLeft = 0;
+  private timedOut = false;
+  private lastSec = -1;
+  private timerPulseUntil = 0;
+  private timerG!: Phaser.GameObjects.Graphics;
+  private timerText!: Phaser.GameObjects.BitmapText;
+  /** riquadro premio: monete in palio oppure "NIENTE PREMIO" */
+  private prizeObjs: Phaser.GameObjects.GameObject[] = [];
+  private noPrizeObjs: Phaser.GameObjects.GameObject[] = [];
+  private prizeText!: Phaser.GameObjects.BitmapText;
+  private prizeBumpUntil = 0;
+
+  /** juice */
+  private floats: FloatText[] = [];
+  private fxObjs: Phaser.GameObjects.GameObject[] = [];
+  private combo = 0;
+  private lastRegionAt = -1e9;
+  private comboText!: Phaser.GameObjects.BitmapText;
+  private comboStart = 0;
+  private milestone = 0;
+  private lastFloatPct = 0;
+  private bannerG!: Phaser.GameObjects.Graphics;
+  private bannerBig!: Phaser.GameObjects.BitmapText;
+  private bannerSub!: Phaser.GameObjects.BitmapText;
+  private bannerStart = 0;
+  private bannerUntil = 0;
+  private bannerScale = 3;
+  private bannerPop = 4;
+  private barGlowUntil = 0;
+  private barGlowing = false;
+  private screenFlash!: Phaser.GameObjects.Rectangle;
+  private splats = 0;
+  private lastWord = '';
 
   constructor() {
     super('Spritz');
@@ -174,6 +248,22 @@ export class Spritz extends Phaser.Scene {
     this.hint = [];
     this.targetX = this.aimX = 90;
     this.targetY = this.aimY = 110;
+    this.timeLeft = SPRITZ.timerMs;
+    this.timedOut = false;
+    this.timerWarned = false;
+    this.lastSec = -1;
+    this.timerPulseUntil = 0;
+    this.prizeObjs = [];
+    this.noPrizeObjs = [];
+    this.prizeBumpUntil = 0;
+    this.floats = [];
+    this.fxObjs = [];
+    this.combo = 0;
+    this.lastRegionAt = -1e9;
+    this.bannerUntil = 0;
+    this.barGlowUntil = 0;
+    this.barGlowing = false;
+    this.splats = 0;
     this.cameras.main.setZoom(1).setOrigin(0.5);
     anchorBottom(this);
 
@@ -283,20 +373,40 @@ export class Spritz extends Phaser.Scene {
     ).setDepth(D.hud + 2);
     h.push(exitBtn);
 
-    // in basso a sinistra: manometro della pompa
-    drawPanel(g, GAUGE.x, GAUGE.y, GAUGE.w, GAUGE.h, { shadow: C.black });
-    this.gaugeLabel = pixelText(this, GAUGE.x + 3, GAUGE.y + 2, 'PRESSIONE', C.white).setDepth(D.hud + 1);
-    this.refillLabel = pixelText(this, GAUGE.x + 3, GAUGE.y + 2, 'RICARICA', C.orange).setDepth(D.hud + 1).setVisible(false);
+    // in basso a sinistra: manometro della pompa (ancorato al fondo dello schermo)
+    const y = this.hudY;
+    drawPanel(g, GAUGE.x, y, GAUGE.w, GAUGE.h, { shadow: C.black });
+    this.gaugeLabel = pixelText(this, GAUGE.x + 3, y + 2, 'PRESSIONE', C.white).setDepth(D.hud + 1);
+    this.refillLabel = pixelText(this, GAUGE.x + 3, y + 2, 'RICARICA', C.orange).setDepth(D.hud + 1).setVisible(false);
     this.gaugeG = this.add.graphics().setDepth(D.hud + 1);
     h.push(this.gaugeLabel, this.refillLabel, this.gaugeG);
 
-    // in basso a destra: il premio in palio
-    drawPanel(g, PRIZE.x, PRIZE.y, PRIZE.w, PRIZE.h, { fill: C.navy, highlight: C.blue, shadow: C.black });
-    h.push(
-      pixelText(this, PRIZE.x + 3, PRIZE.y + 2, 'PREMIO', C.silver).setDepth(D.hud + 1),
-      this.add.image(PRIZE.x + 4, PRIZE.y + 12, 'ui-coin').setOrigin(0).setDepth(D.hud + 1),
-      pixelText(this, PRIZE.x + PRIZE.w - 3, PRIZE.y + 11, `+${this.reward}`, C.yellow).setOrigin(1, 0).setDepth(D.hud + 1),
-    );
+    // in basso al centro: il timer grande (testo bianco tinto: bianco, rosso negli ultimi secondi, grigio a tempo scaduto)
+    this.timerG = this.add.graphics().setDepth(D.hud);
+    this.timerText = pixelText(this, TIMER.x + TIMER.w / 2, y + Math.floor(TIMER.h / 2) + 1, '', C.white)
+      .setOrigin(0.5)
+      .setScale(2)
+      .setDepth(D.hud + 2);
+    h.push(this.timerG, this.timerText);
+    this.drawTimerPanel();
+    this.updateTimerText(true);
+
+    // in basso a destra: il premio in palio (o "NIENTE PREMIO" a tempo scaduto)
+    drawPanel(g, PRIZE.x, y, PRIZE.w, PRIZE.h, { fill: C.navy, highlight: C.blue, shadow: C.black });
+    this.prizeText = pixelText(this, PRIZE.x + PRIZE.w - 3, y + 11, `+${this.reward}`, C.white)
+      .setOrigin(1, 0)
+      .setTint(col(C.yellow))
+      .setDepth(D.hud + 1);
+    this.prizeObjs = [
+      pixelText(this, PRIZE.x + 3, y + 2, 'PREMIO', C.silver).setDepth(D.hud + 1),
+      this.add.image(PRIZE.x + 4, y + 12, 'ui-coin').setOrigin(0).setDepth(D.hud + 1),
+      this.prizeText,
+    ];
+    this.noPrizeObjs = [
+      pixelText(this, PRIZE.x + PRIZE.w / 2, y + 2, 'NIENTE', C.red).setOrigin(0.5, 0).setDepth(D.hud + 1),
+      pixelText(this, PRIZE.x + PRIZE.w / 2, y + 11, 'PREMIO', C.silver).setOrigin(0.5, 0).setDepth(D.hud + 1),
+    ];
+    h.push(...this.prizeObjs, ...this.noPrizeObjs);
 
     // suggerimento finché non si spruzza
     this.hint = [
@@ -310,10 +420,26 @@ export class Spritz extends Phaser.Scene {
       callback: () => this.hint[0]?.active && this.hint[0].setVisible(!this.hint[0].visible),
     });
 
+    this.buildFx();
+
     // tendine nere per ingresso/uscita (sempre sopra a tutto)
     const black = col(C.black);
     this.wipeTop = this.add.rectangle(0, SCREEN.top, W, 0, black).setOrigin(0).setDepth(D.wipe);
     this.wipeBottom = this.add.rectangle(0, H, W, 0, black).setOrigin(0, 1).setDepth(D.wipe);
+  }
+
+  /** Oggetti del juice creati una volta sola: pool di scritte, combo, striscione, lampo a schermo pieno. */
+  private buildFx(): void {
+    for (let i = 0; i < SPRITZ.maxFloatTexts; i++) {
+      const t = pixelText(this, 0, 0, '', C.white).setOrigin(0.5).setDepth(D.text).setVisible(false);
+      this.floats.push({ t, active: false, start: 0, life: 1, x: 0, y: 0, rise: 0, s0: 1, s1: 1, rot: 0 });
+    }
+    this.comboText = pixelText(this, W / 2, COMBO_Y, '', C.white).setOrigin(0.5, 0).setDepth(D.text + 2).setVisible(false);
+    this.bannerG = this.add.graphics().setDepth(D.banner).setVisible(false);
+    this.bannerBig = pixelText(this, W / 2, BANNER.y + 15, '', C.white).setOrigin(0.5).setDepth(D.banner + 1).setVisible(false);
+    this.bannerSub = pixelText(this, W / 2, BANNER.y + 31, '', C.white).setOrigin(0.5).setDepth(D.banner + 1).setVisible(false);
+    this.screenFlash = this.add.rectangle(0, SCREEN.top, W, SCREEN.height, col(C.white)).setOrigin(0).setDepth(D.screenFlash).setVisible(false);
+    this.fxObjs = [...this.floats.map((f) => f.t), this.comboText, this.bannerG, this.bannerBig, this.bannerSub, this.screenFlash];
   }
 
   /** Ricostruisce la copertura salvata: le prime celle dell'ordine a macchie, coperte. */
@@ -335,6 +461,9 @@ export class Spritz extends Phaser.Scene {
     for (let i = 0; i < this.coat.length; i++) if (this.coat[i]) this.paintCell(i);
     this.flushCoat();
     this.lastEmitted = percent;
+    // traguardi e "+1%" ripartono da dove si era rimasti
+    this.milestone = Math.floor(this.percent() / SPRITZ.milestoneStep);
+    this.lastFloatPct = Math.floor(this.percent());
     this.updateHud();
   }
 
@@ -365,7 +494,11 @@ export class Spritz extends Phaser.Scene {
             cam.setOrigin(0.5);
             this.setVisible(this.hudObjs, true);
             this.hudShown = true;
+            this.applyPrizeVisibility();
             this.ready = true;
+            // il timer parte adesso: "VIA!" con un bip
+            this.showFloat(W / 2, this.hudY - 10, `${Math.round(SPRITZ.timerMs / 60000)} MINUTI!`, C.yellow, { scale: 1, pop: 2, rise: 18, life: 1100 });
+            tone({ type: 'square', from: 880, to: 1320, dur: 0.12, vol: 0.12 });
           }
         },
       });
@@ -383,6 +516,8 @@ export class Spritz extends Phaser.Scene {
       this.setVisible(this.viewObjs, false);
       this.setVisible(this.hudObjs, false);
       this.setVisible(this.partyObjs, false);
+      this.setVisible(this.fxObjs, false);
+      for (const f of this.floats) f.active = false;
       this.hudShown = false;
       this.reticle.setVisible(false);
       for (const c of this.coins) releaseImage(c.img);
@@ -459,6 +594,13 @@ export class Spritz extends Phaser.Scene {
     const now = this.time.now;
     const spraying = this.ready && this.sprayId >= 0;
 
+    // timer: corre solo mentre si gioca (non durante salita, festa o uscita)
+    if (this.ready && !this.finished && !this.timedOut) {
+      this.timeLeft -= Math.min(delta, 250);
+      if (this.timeLeft <= 0) this.timeUp();
+      else this.updateTimerText(false);
+    }
+
     // pompa: cala mentre spruzzi, si ricarica quando molli (o a secco)
     if (spraying && !this.locked) {
       this.pressure -= (SPRITZ.pressureDrainPerSec * dt) / 1000;
@@ -509,6 +651,10 @@ export class Spritz extends Phaser.Scene {
     this.updateDrips(now);
     this.updateCoins(now);
     this.flushCoat();
+    this.checkProgressFx();
+    this.updateFloats(now);
+    this.updateBanner(now);
+    this.updateCombo(now);
     this.updateHud();
   }
 
@@ -604,8 +750,19 @@ export class Spritz extends Phaser.Scene {
     if (this.finished) return;
     const onWall = viewKind(x, y) === 'wall';
     if (this.landed % SPRITZ.splatEvery === 0) {
-      popFrames(this, x, y, SPLAT_FRAMES, SPRITZ.splatFrameMs, { depth: D.drop + 1 });
-      noise({ dur: 0.04, vol: 0.05, freq: 1400, freqTo: 300 });
+      // macchie varie: girate a scatti di 90 gradi, specchiate, a volte doppie
+      const img = popFrames(this, x, y, SPLAT_FRAMES, SPRITZ.splatFrameMs, {
+        depth: D.drop + 1,
+        rotation: (Math.floor(Math.random() * 4) * Math.PI) / 2,
+        flipX: Math.random() < 0.5,
+      });
+      if (Math.random() < SPRITZ.splatBigChance) img.setScale(2);
+      // "sploosh": schiocco filtrato + un "blop" grave, intonazione sempre un po' diversa
+      noise({ dur: 0.05, vol: 0.05, freq: 1100 + Math.random() * 900, freqTo: 220 + Math.random() * 200 });
+      if (++this.splats % 2 === 0) {
+        const f = 150 + Math.random() * 170;
+        tone({ type: 'sine', from: f * 1.6, to: f * 0.6, dur: 0.07, vol: 0.09 });
+      }
     }
     if (this.landed % SPRITZ.dustEvery === 0) {
       spawnParticles(this, x, y, { count: 2, colors: [C.slate, C.charcoal, C.silver], speed: 1.2, gravity: 0.12, lifeMs: 380, depth: D.drop + 2 });
@@ -704,7 +861,10 @@ export class Spritz extends Phaser.Scene {
     this.coatTex.refresh();
   }
 
-  /** Zona quasi piena: si completa da sola, lampo bianco, "OK!" e un accordo. */
+  /**
+   * Zona quasi piena: si completa da sola. Lampo a scacchi, parola fumetto,
+   * accordo che sale con la COMBO, coriandoli, scossa e monetine al premio.
+   */
   private completeRegion(reg: number): void {
     this.regionDone[reg] = true;
     const L = this.layout;
@@ -728,13 +888,283 @@ export class Spritz extends Phaser.Scene {
     this.time.delayedCall(70, () => this.flashG.clear());
     const cx = Math.round(sx / cells.length + cs / 2);
     const cy = Math.round(sy / cells.length + cs / 2);
-    spawnParticles(this, cx, cy, { count: 12, colors: [C.white, C.silver, C.yellow], speed: 2.4, lifeMs: 520, depth: D.text });
-    [659, 880, 1175].forEach((f, k) => tone({ type: 'square', from: f, dur: 0.07, vol: 0.1, delay: k * 0.05 }));
-    shake(this, 1, 120);
+
+    // combo: zone una dopo l'altra entro comboWindowMs
+    const now = this.time.now;
+    this.combo = now - this.lastRegionAt <= SPRITZ.comboWindowMs ? this.combo + 1 : 1;
+    this.lastRegionAt = now;
+    const step = Math.min(this.combo, SPRITZ.comboMax) - 1;
+
+    spawnParticles(this, cx, cy, {
+      count: SPRITZ.regionParticles + SPRITZ.regionParticlesPerCombo * step,
+      colors: step > 0 ? CONFETTI : [C.white, C.silver, C.yellow],
+      speed: 2.4 + step * 0.25,
+      lifeMs: 560,
+      depth: D.text,
+    });
+    // accordo maggiore che sale di comboSemitones per gradino; dalla combo 3 anche l'ottava
+    const base = SPRITZ.chimeBaseHz * Math.pow(2, (step * SPRITZ.comboSemitones) / 12);
+    const notes = step >= 2 ? [1, 1.26, 1.5, 2] : [1, 1.26, 1.5];
+    notes.forEach((m, k) => tone({ type: 'square', from: base * m, dur: 0.08, vol: 0.1, delay: k * 0.045 }));
+    shake(this, step >= 2 ? 2 : 1, 120 + step * 20);
     if (this.finished) return;
-    const ok = pixelText(this, cx, cy, 'OK!', C.lime).setOrigin(0.5).setScale(2).setDepth(D.text);
-    this.time.delayedCall(80, () => ok.setScale(1));
-    this.time.delayedCall(SPRITZ.regionPopMs, () => ok.destroy());
+
+    // parola fumetto: con la combo si pesca dalle più "forti", più grande
+    const words = SPRITZ.regionWords;
+    const lo = Math.min(words.length - 3, step);
+    let word = words[lo + Math.floor(Math.random() * (words.length - lo))];
+    if (word === this.lastWord) word = words[lo + ((words.indexOf(word) - lo + 1) % (words.length - lo))];
+    this.lastWord = word;
+    const scale = step >= 2 ? 3 : 2;
+    const wy = Phaser.Math.Clamp(cy, SPRITZ.wallTop + 16, SPRITZ.deckY - 10);
+    this.showFloat(cx, wy, word, WORD_COLORS[step % WORD_COLORS.length], {
+      scale,
+      pop: scale + 1,
+      rise: 12,
+      life: SPRITZ.regionPopMs,
+      rot: (Math.random() < 0.5 ? -1 : 1) * 0.15,
+    });
+    if (this.combo >= 2) this.showCombo();
+
+    // monetine dalla zona al riquadro premio (solo se c'è ancora un premio)
+    if (!this.timedOut) {
+      const n = SPRITZ.regionCoins + Math.floor(step / 2);
+      for (let k = 0; k < n; k++) {
+        const img = acquireImage(this, cx, cy, 'ui-coin').setDepth(D.party + 2).setVisible(false);
+        this.coins.push({ img, start: now + 120 + k * SPRITZ.coinStaggerMs, x0: cx + Phaser.Math.Between(-6, 6), y0: cy, x1: PRIZE.x + 8, y1: this.hudY + 16, small: true });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- juice: scritte, combo, traguardi
+
+  /** Scritta volante dal pool: pop di scala, salita, lampeggio finale (ricicla la più vecchia se piene). */
+  private showFloat(
+    x: number,
+    y: number,
+    text: string,
+    color: number,
+    o: { scale?: number; pop?: number; rise?: number; life?: number; rot?: number } = {},
+  ): void {
+    // la scritta resta tutta dentro lo schermo: scala ridotta se non ci sta, x spostata dai bordi
+    const tw = measureText(text);
+    let s1 = o.scale ?? 1;
+    while (s1 > 1 && tw * s1 > W - 8) s1--;
+    let s0 = Math.max(s1, o.pop ?? s1);
+    while (s0 > s1 && tw * s0 > W - 2) s0--;
+    const half = Math.ceil((tw * s0) / 2) + 1;
+    x = Phaser.Math.Clamp(x, half, W - half);
+    let f = this.floats.find((e) => !e.active);
+    if (!f) f = this.floats.reduce((a, b) => (a.start <= b.start ? a : b));
+    f.active = true;
+    f.start = this.time.now;
+    f.life = o.life ?? 700;
+    f.x = Math.round(x);
+    f.y = Math.round(y);
+    f.rise = o.rise ?? 10;
+    f.s1 = s1;
+    f.s0 = s0;
+    f.rot = o.rot ?? 0;
+    setPixelText(f.t, text);
+    f.t.setTint(col(color)).setScale(f.s0).setRotation(f.rot).setPosition(f.x, f.y).setVisible(this.hudShown).setDepth(D.text + 1);
+  }
+
+  private updateFloats(now: number): void {
+    for (const f of this.floats) {
+      if (!f.active) continue;
+      const el = now - f.start;
+      const t = el / f.life;
+      if (t >= 1 || !this.hudShown) {
+        f.active = false;
+        f.t.setVisible(false);
+        continue;
+      }
+      // pop a scatti: grande per 2 frame, poi a riposo; sale veloce e rallenta
+      f.t.setScale(el < 70 ? f.s0 : f.s1).setRotation(el < 140 ? f.rot : 0);
+      const u = 1 - (1 - t) * (1 - t);
+      f.t.setPosition(f.x, Math.round(f.y - f.rise * u));
+      f.t.setVisible(t < 0.7 || Math.floor(el / 60) % 2 === 0);
+    }
+  }
+
+  /** "COMBO *N" in alto: pop e colore che cambia col gradino. */
+  private showCombo(): void {
+    const step = Math.min(this.combo, SPRITZ.comboMax) - 1;
+    setPixelText(this.comboText, `COMBO *${this.combo}`);
+    this.comboText.setTint(col(WORD_COLORS[(step + 1) % WORD_COLORS.length])).setVisible(this.hudShown);
+    this.comboStart = this.time.now;
+    if (step >= 3) spawnParticles(this, W / 2, COMBO_Y + 6, { count: 8, colors: CONFETTI, speed: 2, lifeMs: 420, depth: D.text + 1 });
+  }
+
+  private updateCombo(now: number): void {
+    if (!this.comboText.visible) return;
+    const el = now - this.comboStart;
+    if (el >= SPRITZ.comboWindowMs || !this.hudShown || this.finished) {
+      this.comboText.setVisible(false);
+      return;
+    }
+    const big = Math.min(this.combo, SPRITZ.comboMax) >= 4 ? 3 : 2;
+    this.comboText.setScale(el < 80 ? big + 1 : big);
+    // ultimo terzo della finestra: lampeggia (la combo sta per finire)
+    if (el > (SPRITZ.comboWindowMs * 2) / 3) this.comboText.setAlpha(Math.floor(el / 90) % 2 ? 0.4 : 1);
+    else this.comboText.setAlpha(1);
+  }
+
+  /** "+1%" vicino al getto, traguardi ogni milestoneStep %, barra che si illumina. */
+  private checkProgressFx(): void {
+    if (this.finished) return;
+    const pct = this.percent();
+    const whole = Math.floor(pct);
+    if (whole > this.lastFloatPct) {
+      const gain = whole - this.lastFloatPct;
+      this.lastFloatPct = whole;
+      this.barGlowUntil = this.time.now + SPRITZ.barGlowMs;
+      if (this.hudShown) {
+        const x = Phaser.Math.Clamp(Math.round(this.aimX) + Phaser.Math.Between(-8, 8), 14, W - 14);
+        const y = Math.max(SPRITZ.wallTop + 20, Math.round(this.aimY) - 10);
+        this.showFloat(x, y, `+${gain}%`, gain > 1 ? C.yellow : C.lime, { scale: 1, pop: 2, rise: 14, life: SPRITZ.pctFloatMs });
+      }
+    }
+    const m = Math.floor(pct / SPRITZ.milestoneStep);
+    if (m > this.milestone) {
+      this.milestone = m;
+      if (m * SPRITZ.milestoneStep < 100) this.showMilestone(m * SPRITZ.milestoneStep);
+    }
+  }
+
+  /** Striscione del traguardo: numero grande che "esplode", suono; 50% e 90% con lampo e coriandoli. */
+  private showMilestone(pct: number): void {
+    const special = pct === 50 || pct === 90;
+    const sub = pct === 50 ? "SEI A META'!" : pct === 90 ? 'QUASI FATTO!' : pct >= 70 ? 'DAI CHE CI SEI!' : 'BEL LAVORO!';
+    this.showBanner(`${pct}%`, sub, special ? C.yellow : C.lime, C.white, special ? 4 : 3, special ? C.plum : C.navy);
+    const base = special ? 659 : 523;
+    const notes = special ? [1, 1.26, 1.5, 2, 2.52] : [1, 1.26, 1.5, 2];
+    notes.forEach((m, k) => tone({ type: 'square', from: base * m, dur: 0.1, vol: 0.12, delay: k * 0.07 }));
+    if (special) {
+      tone({ type: 'triangle', from: base / 2, to: base, dur: 0.4, vol: 0.18 });
+      this.flashScreen(2);
+      shake(this, 2, 260);
+      for (let k = 0; k < 3; k++) {
+        this.time.delayedCall(k * 120, () =>
+          spawnParticles(this, 30 + k * 60, BANNER.y + BANNER.h / 2, { count: 16, colors: CONFETTI, speed: 3, lifeMs: 700, gravity: 0.1, depth: D.banner + 2 }),
+        );
+      }
+    } else {
+      shake(this, 1, 150);
+      spawnParticles(this, W / 2, BANNER.y + BANNER.h / 2, { count: 14, colors: CONFETTI, speed: 2.6, lifeMs: 600, depth: D.banner + 2 });
+    }
+  }
+
+  /** Striscione orizzontale con una scritta grande e una piccola (traguardi, tempo scaduto). */
+  private showBanner(big: string, sub: string, bigColor: number, subColor: number, scale: number, fill: number, ms: number = SPRITZ.milestoneMs): void {
+    this.bannerStart = this.time.now;
+    this.bannerUntil = this.time.now + ms;
+    this.bannerScale = scale;
+    // il "pop" ingrandisce di 1 solo se la scritta ci sta ancora
+    this.bannerPop = measureText(big) * (scale + 1) <= W - 2 ? scale + 1 : scale;
+    const g = this.bannerG.clear();
+    drawPanel(g, -1, BANNER.y, W + 2, BANNER.h, { fill, highlight: C.white, shadow: C.black });
+    g.fillStyle(col(C.black)).fillRect(0, BANNER.y + BANNER.h - 2, W, 1);
+    setPixelText(this.bannerBig, big);
+    setPixelText(this.bannerSub, sub);
+    this.bannerBig.setTint(col(bigColor)).setScale(this.bannerPop);
+    this.bannerSub.setTint(col(subColor));
+    const v = this.hudShown;
+    this.bannerG.setVisible(v);
+    this.bannerBig.setVisible(v);
+    this.bannerSub.setVisible(v);
+  }
+
+  private updateBanner(now: number): void {
+    if (!this.bannerG.visible) return;
+    const el = now - this.bannerStart;
+    if (now >= this.bannerUntil || !this.hudShown) {
+      this.bannerG.setVisible(false);
+      this.bannerBig.setVisible(false);
+      this.bannerSub.setVisible(false);
+      return;
+    }
+    // entra a scatti dal lato, pop della scritta grande, lampeggio negli ultimi 300 ms
+    const slide = el < 90 ? Math.round(W * (1 - el / 90)) : 0;
+    this.bannerG.x = -slide;
+    this.bannerBig.setScale(el < 140 ? this.bannerPop : this.bannerScale).setX(W / 2 - slide);
+    this.bannerSub.setX(W / 2 - slide).setVisible(el > 120);
+    const blink = this.bannerUntil - now < 300 && Math.floor(el / 60) % 2 === 0;
+    this.bannerBig.setAlpha(blink ? 0.3 : 1);
+  }
+
+  /** Lampo bianco a schermo pieno per `frames` scatti da 2 frame. */
+  private flashScreen(times: number): void {
+    for (let k = 0; k < times; k++) {
+      this.time.delayedCall(k * 120, () => this.screenFlash.setVisible(this.hudShown).setAlpha(0.8));
+      this.time.delayedCall(k * 120 + 40, () => this.screenFlash.setVisible(false));
+    }
+  }
+
+  // ---------------------------------------------------------------- timer
+
+  private drawTimerPanel(): void {
+    const g = this.timerG.clear();
+    const warn = !this.timedOut && this.timeLeft <= SPRITZ.timerWarnMs;
+    const fill = this.timedOut ? C.charcoal : warn ? C.plum : C.navy;
+    const highlight = this.timedOut ? C.slate : warn ? C.red : C.blue;
+    drawPanel(g, TIMER.x, this.hudY, TIMER.w, TIMER.h, { fill, highlight, shadow: C.black });
+  }
+
+  /** Testo del timer "M:SS"; negli ultimi secondi rosso, tic e pulsazione a ogni secondo. */
+  private updateTimerText(force: boolean): void {
+    const sec = Math.max(0, Math.ceil(this.timeLeft / 1000));
+    const now = this.time.now;
+    if (sec !== this.lastSec || force) {
+      const crossed = this.lastSec > sec;
+      this.lastSec = sec;
+      setPixelText(this.timerText, `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`);
+      const warn = this.timeLeft <= SPRITZ.timerWarnMs;
+      if (warn && crossed) {
+        this.timerPulseUntil = now + 110;
+        const panic = this.timeLeft <= SPRITZ.timerPanicMs;
+        tone({ type: 'square', from: panic ? 1568 : 1175, to: panic ? 1400 : 1000, dur: 0.04, vol: 0.1 });
+        if (panic) tone({ type: 'square', from: 1568, to: 1400, dur: 0.04, vol: 0.08, delay: 0.12 });
+      }
+      // entrata negli ultimi secondi: riquadro rosso
+      if (warn && !this.timerWarned) {
+        this.timerWarned = true;
+        this.drawTimerPanel();
+      }
+    }
+    const warn = !this.timedOut && this.timeLeft <= SPRITZ.timerWarnMs;
+    const pulse = now < this.timerPulseUntil;
+    this.timerText
+      .setTint(col(this.timedOut ? C.silver : warn ? (pulse ? C.white : C.red) : C.white))
+      .setScale(pulse ? 3 : 2);
+  }
+
+  /** Tempo scaduto: scritta grande, timer grigio, niente premio; si può continuare a spruzzare. */
+  private timeUp(): void {
+    this.timedOut = true;
+    this.timeLeft = 0;
+    this.reward = 0;
+    this.combo = 0;
+    this.lastSec = -1;
+    this.updateTimerText(true);
+    this.drawTimerPanel();
+    this.applyPrizeVisibility();
+    this.showBanner('TEMPO SCADUTO!', 'NIENTE PREMIO', C.red, C.white, 2, C.black, SPRITZ.timeoutBannerMs);
+    this.flashScreen(1);
+    shake(this, 2, 300);
+    // "uoo-uoo": tre note che scendono + soffio
+    [392, 330, 262].forEach((f, k) => tone({ type: 'square', from: f, to: f * 0.94, dur: 0.18, vol: 0.12, delay: k * 0.2 }));
+    noise({ dur: 0.5, vol: 0.06, freq: 700, freqTo: 120, delay: 0.55 });
+    // monetine ancora in volo: spariscono
+    for (const c of this.coins) if (c.small) releaseImage(c.img);
+    this.coins = this.coins.filter((c) => !c.small);
+  }
+
+  /** Riquadro premio: monete in palio, oppure "NIENTE PREMIO" a tempo scaduto. */
+  private applyPrizeVisibility(): void {
+    const v = this.hudShown;
+    this.setVisible(this.prizeObjs, v && !this.timedOut);
+    this.setVisible(this.noPrizeObjs, v && this.timedOut);
   }
 
   // ---------------------------------------------------------------- HUD
@@ -744,31 +1174,44 @@ export class Spritz extends Phaser.Scene {
   }
 
   private updateHud(): void {
+    const now = this.time.now;
     const pct = this.percent();
     const shown = this.finished ? 100 : Math.min(99, Math.floor(pct));
-    if (shown !== this.shownPct) {
+    const glow = now < this.barGlowUntil;
+    if (shown !== this.shownPct || glow || this.barGlowing) {
+      if (shown !== this.shownPct) setPixelText(this.pctText, `${shown}%`);
       this.shownPct = shown;
-      setPixelText(this.pctText, `${shown}%`);
+      this.barGlowing = glow;
       const g = this.barG.clear();
-      drawPanel(g, BAR.x, BAR.y, BAR.w, BAR.h, { fill: C.black, border: C.black, highlight: null });
+      // bordo che lampeggia giallo/bianco mentre la barra cresce
+      const border = glow ? (Math.floor(now / 60) % 2 ? C.yellow : C.white) : C.black;
+      drawPanel(g, BAR.x, BAR.y, BAR.w, BAR.h, { fill: C.black, border, highlight: null });
       const fw = Math.round(((BAR.w - 2) * shown) / 100);
       if (fw > 0) {
-        g.fillStyle(col(C.lime)).fillRect(BAR.x + 1, BAR.y + 1, fw, BAR.h - 2);
-        g.fillStyle(col(C.green)).fillRect(BAR.x + 1, BAR.y + BAR.h - 3, fw, 2);
+        g.fillStyle(col(glow ? C.white : C.lime)).fillRect(BAR.x + 1, BAR.y + 1, fw, BAR.h - 2);
+        g.fillStyle(col(glow ? C.lime : C.green)).fillRect(BAR.x + 1, BAR.y + BAR.h - 3, fw, 2);
+        // punta luminosa
+        if (glow && fw > 2) g.fillStyle(col(C.yellow)).fillRect(BAR.x + fw - 1, BAR.y + 1, 2, BAR.h - 2);
       }
       // tacche ogni 25%
       g.fillStyle(col(C.charcoal));
       for (let q = 1; q < 4; q++) g.fillRect(BAR.x + 1 + Math.round(((BAR.w - 2) * q) / 4), BAR.y + 1, 1, 2);
+      // la percentuale sobbalza di 1px e diventa gialla
+      this.pctText.setY(HUD_Y + (glow ? 2 : 3)).setTint(col(glow ? C.yellow : C.white));
     }
+
+    // riquadro premio: sobbalzo quando arriva una monetina
+    const bump = now < this.prizeBumpUntil;
+    this.prizeText.setY(this.hudY + (bump ? 10 : 11)).setTint(col(bump ? C.white : C.yellow));
 
     // manometro: azzurro, arancio quando tossisce, rosso lampeggiante a secco
     const g = this.gaugeG.clear();
     const bx = GAUGE.x + 3;
-    const by = GAUGE.y + 12;
+    const by = this.hudY + 12;
     const bw = GAUGE.w - 6;
     g.fillStyle(col(C.black)).fillRect(bx, by, bw, 6);
     const pw = Math.round((bw - 2) * this.pressure);
-    const blink = Math.floor(this.time.now / 150) % 2 === 0;
+    const blink = Math.floor(now / 150) % 2 === 0;
     const fill = this.locked ? (blink ? C.red : C.plum) : this.pressure < SPRITZ.sputterBelow ? C.orange : C.cyan;
     if (pw > 0) g.fillStyle(col(fill)).fillRect(bx + 1, by + 1, pw, 4);
     if (this.locked) {
@@ -801,12 +1244,30 @@ export class Spritz extends Phaser.Scene {
       d.active = false;
       d.img.setVisible(false);
     }
-    // premio subito (anche se si chiude la pagina durante la festa); il save azzera la percentuale
-    economy.add(this.reward);
-    events.emit('spritz:done', { reward: this.reward });
+    this.comboText.setVisible(false);
+    for (const f of this.floats) {
+      f.active = false;
+      f.t.setVisible(false);
+    }
+    this.bannerUntil = 0;
+    // premio subito (anche se si chiude la pagina durante la festa); il save azzera la percentuale.
+    // A tempo scaduto la parete si chiude lo stesso, ma con premio 0 (progression non dà XP)
+    const secLeft = this.timedOut ? 0 : Math.ceil(this.timeLeft / 1000);
+    const bonus = this.timedOut ? 0 : Math.round(secLeft * SPRITZ.timeBonusPerSec);
+    const total = this.timedOut ? 0 : this.reward + bonus;
+    if (total > 0) economy.add(total);
+    events.emit('spritz:done', { reward: total });
 
-    playLevelUp();
-    shake(this, 2, 350);
+    const won = total > 0;
+    if (won) playLevelUp();
+    else [523, 659, 784].forEach((f, i) => tone({ type: 'square', from: f, dur: 0.1, vol: 0.12, delay: i * 0.08 }));
+    if (won) {
+      // fanfara: accordo lungo sotto l'arpeggio
+      tone({ type: 'triangle', from: 262, to: 523, dur: 0.6, vol: 0.2, delay: 0.1 });
+      [1047, 1319, 1568, 2093].forEach((f, i) => tone({ type: 'square', from: f, dur: 0.12, vol: 0.1, delay: 0.5 + i * 0.09 }));
+    }
+    shake(this, 3, 450);
+    this.flashScreen(won ? 3 : 1);
     // lampo bianco a scatti di tutta la parete
     this.coatImg.setTintFill(col(C.white));
     this.time.delayedCall(70, () => this.coatImg.clearTint());
@@ -815,11 +1276,11 @@ export class Spritz extends Phaser.Scene {
 
     const cx = W / 2;
     const party = this.partyObjs;
+    const top = 60;
     const g = this.add.graphics().setDepth(D.party);
-    drawPanel(g, 14, 80, W - 28, 90, { fill: C.navy, highlight: C.blue, shadow: C.black });
-    const bigA = pixelText(this, cx, 102, '100%!', C.lime).setOrigin(0.5).setScale(4).setDepth(D.party + 1);
-    const bigB = pixelText(this, cx, 102, '100%!', C.yellow).setOrigin(0.5).setScale(3).setDepth(D.party + 1).setVisible(false);
-    this.time.delayedCall(70, () => bigA.setScale(3));
+    const bigA = pixelText(this, cx, top + 20, '100%!', C.lime).setOrigin(0.5).setScale(5).setDepth(D.party + 1);
+    const bigB = pixelText(this, cx, top + 20, '100%!', C.yellow).setOrigin(0.5).setScale(4).setDepth(D.party + 1).setVisible(false);
+    this.time.delayedCall(70, () => bigA.setScale(4));
     this.time.addEvent({
       delay: 150,
       loop: true,
@@ -829,49 +1290,87 @@ export class Spritz extends Phaser.Scene {
         bigB.setVisible(!bigA.visible);
       },
     });
-    const prize = pixelText(this, cx + 6, 146, `+${this.reward}`, C.yellow).setOrigin(0.5, 0).setDepth(D.party + 1);
-    const coinX = Math.round(cx + 6 - prize.width / 2 - 10);
-    party.push(
-      g,
-      bigA,
-      bigB,
-      prize,
-      pixelText(this, cx, 122, 'GALLERIA', C.white).setOrigin(0.5, 0).setDepth(D.party + 1),
-      pixelText(this, cx, 132, 'RIVESTITA!', C.white).setOrigin(0.5, 0).setDepth(D.party + 1),
-      this.add.image(coinX, 147, 'ui-coin').setOrigin(0).setDepth(D.party + 1),
-      pixelText(this, cx, 157, '+XP BONUS!', C.cyan).setOrigin(0.5, 0).setDepth(D.party + 1),
-    );
+    party.push(g, bigA, bigB);
 
-    // monete che volano dalla parete al premio, coriandoli
-    const now = this.time.now;
-    for (let i = 0; i < SPRITZ.celebrateCoins; i++) {
-      const x0 = Phaser.Math.Between(10, W - 10);
-      const y0 = Phaser.Math.Between(SPRITZ.wallTop + 4, SPRITZ.deckY - 10);
-      const img = acquireImage(this, x0, y0, 'ui-coin').setDepth(D.party + 2).setVisible(false);
-      this.coins.push({ img, start: now + 250 + i * SPRITZ.coinStaggerMs, x0, y0, x1: coinX + 4, y1: 150 });
+    // righe impilate che entrano una alla volta con un "pop" e un bip che sale
+    const lines: { text: string; color: number; coin?: boolean }[] = [
+      { text: 'GALLERIA', color: C.white },
+      { text: 'RIVESTITA!', color: C.white },
+    ];
+    if (won) {
+      lines.push({ text: `+${this.reward}`, color: C.yellow, coin: true });
+      if (bonus > 0) lines.push({ text: `BONUS TEMPO +${bonus}`, color: C.orange });
+      lines.push({ text: '+XP BONUS!', color: C.cyan });
+    } else {
+      lines.push({ text: 'TEMPO SCADUTO', color: C.silver }, { text: 'NIENTE PREMIO', color: C.red });
     }
+    // pannello alto quanto le righe, con lo spazio per "TOCCA PER CONTINUARE"
+    const tapY = top + 38 + lines.length * 11 + 4;
+    drawPanel(g, 12, top, W - 24, tapY + 14 - top, { fill: C.navy, highlight: C.blue, shadow: C.black });
+    let coinX = cx;
+    let coinY = top + 60;
+    lines.forEach((l, k) => {
+      const y = top + 38 + k * 11;
+      const t = pixelText(this, l.coin ? cx + 6 : cx, y, l.text, l.color).setOrigin(0.5, 0).setDepth(D.party + 1).setVisible(false);
+      party.push(t);
+      let coin: Phaser.GameObjects.Image | null = null;
+      if (l.coin) {
+        coinX = Math.round(cx + 6 - t.width / 2 - 10);
+        coinY = y + 1;
+        coin = this.add.image(coinX, coinY, 'ui-coin').setOrigin(0).setDepth(D.party + 1).setVisible(false);
+        party.push(coin);
+      }
+      this.time.delayedCall(260 + k * 200, () => {
+        if (!this.hudShown) return;
+        t.setVisible(true).setScale(2);
+        coin?.setVisible(true);
+        this.time.delayedCall(70, () => t.setScale(1));
+        tone({ type: 'square', from: 660 * Math.pow(2, (k * 2) / 12), dur: 0.06, vol: 0.1 });
+      });
+    });
+
+    // pioggia di monete dalla parete al premio
+    const now = this.time.now;
+    if (won) {
+      for (let i = 0; i < SPRITZ.celebrateCoins; i++) {
+        const x0 = Phaser.Math.Between(10, W - 10);
+        const y0 = Phaser.Math.Between(SPRITZ.wallTop + 4, SPRITZ.deckY - 10);
+        const img = acquireImage(this, x0, y0, 'ui-coin').setDepth(D.party + 2).setVisible(false);
+        this.coins.push({ img, start: now + 650 + i * SPRITZ.coinStaggerMs, x0, y0, x1: coinX + 4, y1: coinY + 3, small: false });
+      }
+    }
+    // fuochi d'artificio di cemento e coriandoli, con il "bum"
     this.time.addEvent({
-      delay: 160,
-      repeat: 7,
-      callback: () =>
-        spawnParticles(this, Phaser.Math.Between(20, W - 20), Phaser.Math.Between(60, 200), {
-          count: 10,
-          colors: [C.yellow, C.lime, C.white, C.cyan, C.orange],
-          speed: 2.6,
-          lifeMs: 700,
+      delay: SPRITZ.fireworkEveryMs,
+      repeat: SPRITZ.fireworks - 1,
+      callback: () => {
+        if (!this.hudShown) return;
+        const x = Phaser.Math.Between(16, W - 16);
+        const y = Phaser.Math.Between(SPRITZ.wallTop + 6, SPRITZ.deckY - 20);
+        const cement = Math.random() < 0.35;
+        spawnParticles(this, x, y, {
+          count: 14,
+          colors: cement ? CEMENT : CONFETTI,
+          speed: 3,
+          gravity: 0.09,
+          lifeMs: 800,
           depth: D.party + 3,
-        }),
+        });
+        popFrames(this, x, y, SPLAT_FRAMES, SPRITZ.splatFrameMs, { depth: D.party - 1 }).setScale(2);
+        noise({ dur: 0.18, vol: 0.08, freq: 1800 + Math.random() * 800, freqTo: 120 });
+        tone({ type: 'triangle', from: 110 + Math.random() * 60, to: 50, dur: 0.15, vol: 0.12 });
+      },
     });
     this.time.delayedCall(SPRITZ.celebrateMinMs, () => {
       if (this.exiting) return;
-      const t = pixelText(this, cx, 184, 'TOCCA PER CONTINUARE', C.silver).setOrigin(0.5, 0).setDepth(D.party + 1);
+      const t = pixelText(this, cx, tapY, 'TOCCA PER CONTINUARE', C.silver).setOrigin(0.5, 0).setDepth(D.party + 1);
       party.push(t);
       this.time.addEvent({ delay: 400, loop: true, callback: () => this.hudShown && t.setVisible(!t.visible) });
     });
     this.time.delayedCall(SPRITZ.celebrateMs, () => this.exit());
   }
 
-  /** Monete della festa: volo a scatti su una curva, scintilla bianca ogni 4 passi. */
+  /** Monete in volo: a scatti su una curva, scintilla bianca ogni 4 passi; le monetine delle zone fanno sobbalzare il premio. */
   private updateCoins(now: number): void {
     let w = 0;
     for (const c of this.coins) {
@@ -884,6 +1383,7 @@ export class Spritz extends Phaser.Scene {
       if (t >= 1) {
         releaseImage(c.img);
         playCoin();
+        if (c.small) this.prizeBumpUntil = now + 100;
         continue;
       }
       const u = t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t);

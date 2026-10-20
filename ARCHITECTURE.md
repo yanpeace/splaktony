@@ -403,10 +403,21 @@ segnaposto `s`/`h`/`l` convertiti da `skin()` (costanti `SKIN_*` in
 - Gioco: tieni premuto e trascina; il bersaglio sta `aimOffsetY` sopra il
   dito, la lancia in basso lo segue e spara gocce (pool) che coprono una
   griglia di celle da `SPRITZ.cell` px (`buildWallLayout(seed)`: celle di
-  parete, strati necessari, zone angolari, ordine di ripresa). Due strati per
+  parete, strati necessari, zone = `regionSectors` settori x anelli
+  `regionRings` (`REGION_COUNT`), ordine di ripresa). Due strati per
   cella (`chunkLayers` sui blocchi sporgenti); zona piena al `regionAutoFill`
-  → si completa da sola ("OK!"). Pompa: `pressure` cala spruzzando, si
-  ricarica mollando, a secco riparte a `lockoutResume`.
+  → si completa da sola (parola fumetto, accordo, monetine al premio). Pompa:
+  `pressure` cala spruzzando (~17 s), si ricarica mollando, a secco riparte a
+  `lockoutResume`.
+- Timer `SPRITZ.timerMs` (2:00) a ogni ingresso, nel riquadro in basso al
+  centro: rosso, tic e pulsazione negli ultimi `timerWarnMs`. Scaduto →
+  striscione "TEMPO SCADUTO!", riquadro premio "NIENTE PREMIO"; si può finire
+  la parete ma `spritz:done` porta `reward: 0` (progression: XP solo se
+  `reward > 0`). In tempo: premio + `timeBonusPerSec` x secondi rimasti.
+- Juice (pool fisso di scritte `maxFloatTexts`, oggetti creati una volta):
+  COMBO per zone entro `comboWindowMs` (accordo che sale), "+1%" vicino al
+  getto, striscioni ogni `milestoneStep` % (50 e 90 con lampo e coriandoli),
+  barra/percentuale che si illuminano, festa finale con fuochi e pioggia di monete.
 - Percentuale = celle coperte / celle di parete. `spritz:progress` ogni
   `saveEveryMs` e all'uscita; al rientro la copertura salvata si ricostruisce
   a macchie (stesso seed = `completed * 3 + mondo`).

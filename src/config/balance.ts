@@ -1949,10 +1949,12 @@ export const SPRITZ = {
   floorSlope: 0.913,
   /** profondità a schermo: v = depthK / raggio (roccia, centine e rete in prospettiva) */
   depthK: 4000,
-  /** settori angolari della parete (zone che si completano con il "pop") */
-  regions: 8,
+  /** zone che si completano con il "pop": settori angolari x anelli (raggi di separazione dal punto
+   *  di fuga). 8 x 3 = 24 caselle, 22 piene (33..137 celle): un "pop" ogni pochi secondi */
+  regionSectors: 8,
+  regionRings: [72, 100] as readonly number[],
   /** una zona coperta a questa frazione si completa da sola (niente caccia all'ultimo pixel) */
-  regionAutoFill: 0.92,
+  regionAutoFill: 0.85,
   /** blocchi di roccia sporgente che vogliono più cemento */
   chunks: 6,
   /** distanza minima dal punto di fuga e tra due blocchi (px) */
@@ -1965,8 +1967,8 @@ export const SPRITZ = {
   /** da qui in su la cella mostra lo strato sottile */
   thinAt: 0.6,
   /** cemento aggiunto da una goccia al centro e al bordo della macchia */
-  dropPaintCenter: 0.6,
-  dropPaintEdge: 0.28,
+  dropPaintCenter: 0.75,
+  dropPaintEdge: 0.35,
   /** raggio della macchia di una goccia (px): splatRadius + random(0..splatRadiusVar) */
   splatRadius: 5,
   splatRadiusVar: 3,
@@ -2000,15 +2002,15 @@ export const SPRITZ = {
   dripMaxPx: 11,
   dripHoldMs: 700,
   // --- pressione della pompa
-  /** consumo e ricarica al secondo (1 = serbatoio pieno) */
-  pressureDrainPerSec: 0.17,
-  pressureRechargePerSec: 0.5,
+  /** consumo e ricarica al secondo (1 = serbatoio pieno): ~17 s di getto continuo, piena in ~1 s */
+  pressureDrainPerSec: 0.06,
+  pressureRechargePerSec: 1.1,
   /** la ricarica parte dopo questo tempo dal rilascio */
-  rechargeDelayMs: 220,
-  /** a secco: si riparte quando la pressione torna qui */
-  lockoutResume: 0.4,
+  rechargeDelayMs: 150,
+  /** a secco: si riparte quando la pressione torna qui (~0.5 s) */
+  lockoutResume: 0.5,
   /** sotto questa pressione il getto "tossisce" (gocce saltate) */
-  sputterBelow: 0.15,
+  sputterBelow: 0.1,
   // --- suoni
   hissEveryMs: 110,
   // --- salvataggio dell'avanzamento
@@ -2020,8 +2022,19 @@ export const SPRITZ = {
   rewardPerCompleted: 250,
   rewardMaxCompleted: 12,
   worldRewardMult: [1, 1, 1.5] as readonly number[],
-  /** XP premio = questa frazione dell'XP che serve per il livello corrente */
+  /** XP premio = questa frazione dell'XP che serve per il livello corrente (solo se il premio è > 0) */
   xpLevelFraction: 0.5,
+  /** bonus tempo: monete per ogni secondo rimasto sul timer al 100% */
+  timeBonusPerSec: 4,
+  // --- timer
+  /** tempo per finire la parete e prendere il premio (ogni ingresso riparte da qui) */
+  timerMs: 120000,
+  /** ultimi secondi: timer rosso che pulsa e ticchetta */
+  timerWarnMs: 15000,
+  /** ultimissimi secondi: tic più acuto e doppio */
+  timerPanicMs: 5000,
+  /** scritta "TEMPO SCADUTO!" a schermo */
+  timeoutBannerMs: 2200,
   // --- transizioni e festa
   /** tendine nere a scatti (ingresso e uscita) */
   wipeSteps: 5,
@@ -2030,12 +2043,42 @@ export const SPRITZ = {
   climbZoom: [1.6, 1.4, 1.25, 1.12, 1] as readonly number[],
   climbStepMs: 75,
   /** festa al 100%: ritorno automatico dopo celebrateMs (un tocco la salta dopo celebrateMinMs) */
-  celebrateMs: 3200,
-  celebrateMinMs: 900,
-  celebrateCoins: 14,
+  celebrateMs: 4200,
+  celebrateMinMs: 1200,
+  celebrateCoins: 26,
   coinFlyMs: 520,
   coinStepMs: 40,
   coinStaggerMs: 45,
-  /** scritta "OK!" quando una zona si completa */
-  regionPopMs: 650,
+  /** scritta fumetto quando una zona si completa */
+  regionPopMs: 750,
+  // --- juice: zone, combo, traguardi
+  /** parole a caso sulle zone completate (con combo alte si pesca dalle ultime) */
+  regionWords: ['OK!', 'BENE!', 'GRANDE!', 'SUPER!', 'WOW!', 'PERFETTO!', 'MITICO!', 'SPLAK!'] as readonly string[],
+  /** zone completate entro comboWindowMs l'una dall'altra fanno COMBO */
+  comboWindowMs: 3500,
+  /** tetto della combo per suoni/effetti (il numero mostrato continua a salire) */
+  comboMax: 8,
+  /** accordo della zona: nota base (Hz) che sale di comboSemitones semitoni per ogni gradino di combo */
+  chimeBaseHz: 523,
+  comboSemitones: 2,
+  /** monetine che volano dalla zona al riquadro premio (+ una ogni 2 di combo) */
+  regionCoins: 3,
+  /** particelle del "pop" della zona: base + perCombo per gradino */
+  regionParticles: 10,
+  regionParticlesPerCombo: 3,
+  /** scritte volanti (parole, "+1%"): pool fisso */
+  maxFloatTexts: 12,
+  /** "+1%" vicino al getto a ogni punto percentuale */
+  pctFloatMs: 650,
+  /** striscione dei traguardi ogni milestoneStep % (50 e 90 speciali) */
+  milestoneStep: 10,
+  milestoneMs: 1300,
+  /** barra e percentuale che si illuminano quando crescono */
+  barGlowMs: 260,
+  /** macchie di cemento: scala 2 con questa probabilità (getto più "grasso") */
+  splatBigChance: 0.3,
+  // --- festa finale
+  /** fuochi d'artificio di cemento e coriandoli: uno ogni fireworkEveryMs, per fireworks volte */
+  fireworks: 12,
+  fireworkEveryMs: 170,
 } as const;
