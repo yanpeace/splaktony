@@ -3,6 +3,7 @@ import { SITE_AMBIENT as S } from '../config/balance';
 import { makeSprite, type SpriteData } from '../gfx/pixelSprite';
 import { Subscriptions } from '../systems/events';
 import { HORIZON_Y, NEAR_Y, TREE, TUNNEL, roadAt } from './siteLayout';
+import { TUNNEL_LAMPS } from '../gfx/siteSprites';
 
 /**
  * Animazioni ambientali del cantiere della galleria: lo sfondo "vive" dietro Tony.
@@ -196,17 +197,17 @@ const coneSize = (s: number) => (s >= 0.5 ? 0 : s >= 0.3 ? 1 : 2);
 
 // ---------------------------------------------------------------- galleria
 
-/** luci ai lati del portale (2x2), a metà altezza dell'arco */
-const PORTAL_Y = TUNNEL.y - Math.round(TUNNEL.h / 2) - 1;
-const PORTAL_LX = TUNNEL.x - (TUNNEL.w >> 1) - 3;
-const PORTAL_RX = TUNNEL.x + (TUNNEL.w >> 1) + 1;
-const PORTAL_ON_Y: SpriteData = ['c4', '43'];
-const PORTAL_ON_O: SpriteData = ['43', '32'];
-const PORTAL_OFF: SpriteData = ['11', '1f'];
+/** luci ai lati del portale (3x2): coprono esattamente le lampade statiche dello sfondo */
+const PORTAL_Y = TUNNEL_LAMPS[0].y + 1;
+const PORTAL_LX = TUNNEL_LAMPS[0].x;
+const PORTAL_RX = TUNNEL_LAMPS[1].x;
+const PORTAL_ON_Y: SpriteData = ['4c4', '343'];
+const PORTAL_ON_O: SpriteData = ['3c3', '232'];
+const PORTAL_OFF: SpriteData = ['f1f', '1f1'];
 
 /** le due luci in un'immagine sola: frame 0 sinistra accesa, frame 1 destra accesa */
 function portalSprite(frame: 0 | 1): string[] {
-  const g = new Grid(PORTAL_LX, PORTAL_Y, PORTAL_RX - PORTAL_LX + 2, 2);
+  const g = new Grid(PORTAL_LX, PORTAL_Y, PORTAL_RX - PORTAL_LX + 3, 2);
   g.blit(PORTAL_LX, PORTAL_Y, frame === 0 ? PORTAL_ON_Y : PORTAL_OFF);
   g.blit(PORTAL_RX, PORTAL_Y, frame === 0 ? PORTAL_OFF : PORTAL_ON_O);
   return g.rows();
