@@ -252,6 +252,75 @@ export const WEAPON_STATS = {
     boomSize: 21,
     shakePx: 4,
   },
+  // ---- ARMI NUOVE: fucili iconici ----
+  doppietta: {
+    price: 0, // prezzo in SHOP.prices
+    /** danno grezzo di OGNI pallino */
+    damage: 4,
+    /** pausa minima tra le due canne */
+    cooldownMs: 240,
+    /** pallini per colpo e semi-apertura del cono (radianti) */
+    pellets: 9,
+    coneRad: 0.16,
+    /** Δv di ogni pallino sulla parte colpita (px/step) + quota a tutto Tony */
+    impulse: 2.4,
+    bodyShare: 0.06,
+    hitTolerance: 1,
+    /** colpi prima della ricarica e durata della ricarica a libro */
+    shots: 2,
+    reloadMs: 700,
+  },
+  fucile: {
+    price: 0, // prezzo in SHOP.prices
+    damage: 9.7,
+    /** cadenza della raffica (tieni premuto) */
+    cooldownMs: 90,
+    impulse: 2.6,
+    bodyShare: 0.05,
+    hitTolerance: 2,
+    /** dispersione casuale (px) attorno al punto mirato */
+    spread: 3,
+    /** caricatore e ricarica rapida */
+    magSize: 30,
+    reloadMs: 600,
+    /** rinculo: px di salita della mira a ogni colpo, massimo, recupero (px/step) */
+    recoilPerShot: 0.6,
+    recoilMax: 7,
+    recoilRecover: 0.5,
+  },
+  cecchino: {
+    price: 0, // prezzo in SHOP.prices
+    damage: 210,
+    /** otturatore: pausa tra due colpi */
+    cooldownMs: 950,
+    /** moltiplicatore del danno grezzo alla testa (oltre al x2 di parte) */
+    headMult: 3,
+    impulse: 11,
+    bodyShare: 0.3,
+    hitTolerance: 2,
+    /** ondeggiamento del mirino: px all'apertura e a regime */
+    swayStartPx: 5,
+    swayPx: 1.5,
+    /** ms per passare dall'ondeggiamento iniziale a quello a regime */
+    steadyMs: 450,
+  },
+  rpg: {
+    price: 0, // prezzo in SHOP.prices
+    /** danno grezzo per parte al centro dell'esplosione (cala con la distanza) */
+    damage: 34,
+    /** ricarica: nuovo razzo nel tubo */
+    cooldownMs: 1100,
+    radius: 42,
+    pushRadius: 58,
+    pushStrength: 19,
+    upBoost: 4,
+    /** volo del razzo: velocità iniziale, accelerazione, massima (px/step) */
+    speed: 3.5,
+    accel: 0.35,
+    maxSpeed: 9,
+    boomSize: 20,
+    shakePx: 5,
+  },
 } satisfies Record<string, WeaponStats>;
 
 // ---- FEATURE A: armi da lancio ----
@@ -402,6 +471,11 @@ export const SHOP = {
     mitragliatrice: 3700,
     granata: 9000,
     dinamite: 18000,
+    // ---- ARMI NUOVE: fucili iconici ----
+    doppietta: 3300,
+    fucile: 5200,
+    cecchino: 16000,
+    rpg: 32000,
   } as Record<string, number>,
   /** prezzo per un'arma senza price e non presente in `prices` */
   defaultPrice: 1500,
@@ -792,4 +866,82 @@ export const WEATHER = {
   /** forzato da debug: gocciolio intenso per quanto, e a che ritmo */
   dripBurstMs: 20000,
   dripBurstEveryMs: [150, 450],
+} as const;
+
+// ---- ARMI NUOVE: fucili iconici ----
+/**
+ * Costanti comuni di doppietta, fucile d'assalto, cecchino e RPG
+ * (viewmodel in basso, traccianti, bossoli, fumo, mirino, razzo).
+ */
+export const RIFLES = {
+  // --- viewmodel: arma impugnata disegnata in basso (stile FPS rétro)
+  /** x della base dell'arma a riposo; la base si mette di lato al bersaglio */
+  viewHomeX: 120,
+  /** distanza in x tra bersaglio e base dell'arma, isteresi del cambio lato, inseguimento */
+  viewSideOffset: 34,
+  viewSideHysteresis: 22,
+  viewSlideLerp: 0.12,
+  viewMinX: 26,
+  viewMaxX: 154,
+  /** y della base (sopra la fascia HUD) e profondità */
+  viewBaseY: 298,
+  viewDepth: 30,
+  /** inclinazione massima (px in cima) e passo tra due pose: 9 pose */
+  viewMaxShear: 8,
+  viewShearStep: 2,
+  /** inseguimento della mira (quota per step) */
+  viewAimLerp: 0.35,
+  /** recupero del rinculo (px/step) */
+  viewRecoverPx: 0.7,
+  /** respiro a riposo: ampiezza (px) e periodo (ms) */
+  viewBobPx: 1,
+  viewBobMs: 1100,
+  // --- traccianti
+  tracerMs: 70,
+  maxTracers: 24,
+  tracerDepth: 29,
+  // --- detriti: bossoli, cartucce, caricatori
+  maxDebris: 20,
+  debrisGravity: 0.24,
+  debrisBounce: 0.4,
+  debrisFriction: 0.6,
+  debrisStopSpeed: 0.8,
+  debrisSpinMs: 55,
+  debrisRestMs: 1800,
+  debrisBlinkMs: 600,
+  debrisBlinkStepMs: 90,
+  debrisDepth: 29,
+  // --- fumo (canna, scia del razzo, esplosione)
+  maxPuffs: 64,
+  puffMs: 650,
+  puffRise: 0.22,
+  puffDepth: 28,
+  /** passo del controllo lungo il raggio dei pallini (px) */
+  rayStepPx: 2,
+  // --- cecchino
+  scopeRadius: 46,
+  scopeDepth: 45,
+  /** velocità dell'ondeggiamento (rad/ms) sui due assi */
+  swayFreqX: 0.0023,
+  swayFreqY: 0.0037,
+  skullMs: 750,
+  skullRise: 22,
+  maxSkulls: 4,
+  // --- razzo dell'RPG
+  rocketWobblePx: 1.2,
+  rocketWobbleMs: 110,
+  /** leggero arco: gravità del razzo (px/step²) */
+  rocketGravity: 0.03,
+  rocketHitTolerance: 2,
+  rocketMaxFlightMs: 1600,
+  /** uno sbuffo di scia ogni N step di volo */
+  rocketTrailEvery: 1,
+  maxRockets: 3,
+  rocketDepth: 32,
+  rocketBoomFrameMs: 60,
+  rocketMinDamageShare: 0.25,
+  rocketHitStopMs: 50,
+  rocketShakeMs: 380,
+  rocketSmokePuffs: 9,
+  rocketDebris: 20,
 } as const;
