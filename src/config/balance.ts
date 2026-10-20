@@ -269,6 +269,66 @@ export const WEAPON_STATS = {
     boomSize: 21,
     shakePx: 4,
   },
+  // ---- ARMI NUOVE: mischia iconica ----
+  piedediporco: {
+    price: 0, // prezzo in SHOP.prices
+    /** danno di un colpo (tap); il colpo doppio ne fa due */
+    damage: 7,
+    cooldownMs: 250,
+    /** probabilità che il colpo sia doppio (andata + ritorno) */
+    doubleChance: 0.2,
+    /** Δv alla parte colpita e quota data al resto del corpo */
+    impulse: 8,
+    bodyShare: 0.3,
+    upwardBias: 0.3,
+  },
+  mazza: {
+    price: 0, // prezzo in SHOP.prices
+    /** danno a velocità del gesto = refSpeed (scala con la velocità) */
+    damage: 13,
+    /** pausa minima tra due swing */
+    cooldownMs: 330,
+    /** velocità minima del gesto (px/step) perché parta lo swing */
+    minSpeed: 2.5,
+    refSpeed: 8,
+    /** il moltiplicatore di velocità resta in [minMult, maxMult] */
+    minMult: 0.6,
+    maxMult: 1.6,
+    /** Δv alla parte colpita + spinta laterale a tutto Tony (px/step, a refSpeed) */
+    impulse: 7,
+    bodyPush: 3.5,
+    upwardBias: 0.35,
+    /** gesto più veloce di così = fuoricampo: Tony vola */
+    homeRunSpeed: 11,
+    homeRunPush: 8,
+    hitTolerance: 4,
+  },
+  katana: {
+    price: 0, // prezzo in SHOP.prices
+    /** danno per OGNI parte attraversata dal fendente */
+    damage: 16,
+    /** pausa minima tra due fendenti */
+    cooldownMs: 280,
+    /** velocità minima del gesto (px/step) per tagliare */
+    minSpeed: 3.5,
+    hitTolerance: 3,
+    /** parti colpite al massimo da un fendente */
+    maxParts: 6,
+    /** Δv a ogni parte tagliata, lungo il gesto */
+    impulse: 4,
+  },
+  motosega: {
+    price: 0, // prezzo in SHOP.prices
+    /** danno per "morso" della catena */
+    damage: 12.5,
+    /** ms tra due morsi mentre la lama tocca Tony */
+    cooldownMs: 50,
+    hitTolerance: 4,
+    /** tremolio impresso alla parte tagliata (px/step) */
+    jitter: 1.6,
+    /** attrazione della parte verso la lama (px/step per morso) */
+    pull: 0.5,
+  },
 } satisfies Record<string, WeaponStats>;
 
 // ---- FEATURE A: armi da lancio ----
@@ -419,6 +479,11 @@ export const SHOP = {
     mitragliatrice: 3700,
     granata: 9000,
     dinamite: 18000,
+    // ---- ARMI NUOVE: mischia iconica ----
+    piedediporco: 1400,
+    mazza: 2400,
+    katana: 8000,
+    motosega: 21000,
   } as Record<string, number>,
   /** prezzo per un'arma senza price e non presente in `prices` */
   defaultPrice: 1500,
@@ -955,4 +1020,32 @@ export const JUICE = {
   // ---- audio
   dingVol: 0.12,
   swooshVol: 0.09,
+} as const;
+
+// ---- ARMI NUOVE: mischia iconica ----
+/** Costanti di animazione/feel di piede di porco, mazza, katana e motosega. */
+export const MELEE2 = {
+  /** piede di porco: distanza mano → punta (px) e durata di un frame dello swing */
+  crowLen: 14,
+  crowFrameMs: 40,
+  /** ritardo del secondo colpo del colpo doppio */
+  crowDoubleDelayMs: 130,
+  /** mazza */
+  batLen: 18,
+  batFrameMs: 40,
+  /** stella del fuoricampo: durata e frame */
+  starMs: 700,
+  starFrameMs: 70,
+  /** katana: durata della scia e dello sprite della lama */
+  slashTrailMs: 280,
+  slashFrameMs: 45,
+  /** motosega: tremolio dello sprite (px), cadenza dei suoni del motore */
+  sawShakePx: 1,
+  sawEngineMs: 55,
+  /** tempo per arrivare al massimo dei giri (ms) */
+  sawSpinUpMs: 700,
+  sawIdleHz: 55,
+  sawMaxHz: 150,
+  /** distanza dal dito della punta della lama (px) */
+  sawOffset: 9,
 } as const;
