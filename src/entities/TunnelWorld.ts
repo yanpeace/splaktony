@@ -19,6 +19,15 @@ import {
   VEHICLE_SIZES,
   VEHICLE_SPIN_MIN,
   VEHICLE_W,
+  VEHICLE_BEACON_BIG,
+  PERSON_H,
+  WORKER_PTS,
+  WORKER_TOP,
+  WORKER_W,
+  registerWorkerSprites,
+  workerKey,
+  type WorkerArmL,
+  type WorkerArmR,
   proj,
   vehicleKey,
   registerTunnelSprites,
@@ -46,11 +55,20 @@ import {
  *   passeggeri rialzato a finestrelle) che fa la spola sull'asfalto tra le
  *   fermate: verso di noi nella corsia sinistra con i fari e il loro alone,
  *   lontano nella destra con le luci rosse; lampeggiante arancio, ruote a 2
- *   frame, polvere; 2 operai lontani, luce di emergenza a raffiche.
+ *   frame, polvere; 2 operai lontani, luce di emergenza a raffiche;
+ * - ogni tanto gli operai fanno la pausa sigaretta (insieme o uno alla volta):
+ *   pacchetto, accendino, tirate con la brace di 1 px che lampeggia, sbuffi
+ *   minuscoli, mozzicone lanciato; nel mondo 3 anche la birra (sorsi a
+ *   garganella, goccia di schiuma) e una cassa accanto.
+ *
+ * Scala (1 unità ≈ 5 cm, vedi PERSON_H): tutto ciò che è dentro la galleria
+ * ha la sua misura in unità mondo e diventa px con f / Z (operai, navetta,
+ * detriti); a schermo restano interi.
  *
  * Depth: sfondo 0, ombre dei neon 0.05, neon/luce di emergenza 0.1, detriti
  * 0.12, talpa 0.2..0.22, alone dei fari 0.235, polvere 0.236 / 0.244, navetta
- * 0.24, operai 0.25, fumi 0.3, scintille 2.3.
+ * 0.24, cassa 0.249, operai 0.25, brace/goccia/accendino 0.251, fumi 0.3,
+ * scintille 2.3.
  * Prestazioni: ~50 oggetti creati una volta (pool compresi); cambiano solo
  * texture, posizione e visibilità. Niente corpi fisici (vedi buildRoomBodies).
  */
@@ -66,6 +84,8 @@ const D_CUTTER = 0.21;
 const D_BEACON = 0.22;
 const D_VEH = 0.24;
 const D_WORKER = 0.25;
+/** brace, mozzicone, goccia e accendino degli operai */
+const D_WCIG = 0.251;
 const D_SMOKE = 0.3;
 const D_SPARK = 2.3;
 
@@ -89,8 +109,10 @@ interface Puff {
   x: number;
   y: number;
   drift: number;
-  set: 0 | 1;
+  /** 0 fumi della talpa, 1 polvere, 2 fumo di sigaretta */
+  set: 0 | 1 | 2;
   step: number;
+  steps: number;
   active: boolean;
 }
 
@@ -98,13 +120,63 @@ interface Debris {
   rect: Phaser.GameObjects.Rectangle;
   X: number;
   Z: number;
+  /** lato del sasso (mondo) */
+  size: number;
 }
 
-/** operai lontani: posizione mondo (piedi) e tipo */
-const WORKERS: readonly { X: number; Z: number; kind: 0 | 1 }[] = [
-  { X: -62, Z: 318, kind: 0 },
-  { X: 50, Z: 300, kind: 1 },
+type WorkerPhase = 'work' | 'pocket' | 'place' | 'light' | 'drag' | 'idle' | 'drinkUp' | 'drinkTilt' | 'drinkDown' | 'throw';
+interface Worker {
+  img: Phaser.GameObjects.Image;
+  kind: 0 | 1;
+  /** profondità (mondo): decide se la navetta gli passa davanti */
+  Z: number;
+  h: number;
+  mirror: boolean;
+  /** angolo in alto a sinistra dello sprite e riga dei piedi */
+  x0: number;
+  y0: number;
+  feetY: number;
+  phase: WorkerPhase;
+  left: number;
+  frame: 0 | 1;
+  frameLeft: number;
+  r: WorkerArmR;
+  l: WorkerArmL;
+  /** tempo di pausa rimasto (finita la tirata in corso butta il mozzicone) */
+  breakLeft: number;
+  lit: boolean;
+  ember: Phaser.GameObjects.Rectangle;
+  emberAcc: number;
+  emberHot: boolean;
+  flash: Phaser.GameObjects.Image;
+  flashAcc: number;
+  puffsLeft: number;
+  puffAcc: number;
+  idleSmokeAcc: number;
+  butt: Phaser.GameObjects.Rectangle;
+  buttLeft: number;
+  buttAcc: number;
+  buttVx: number;
+  buttVy: number;
+  buttLanded: boolean;
+  drop: Phaser.GameObjects.Rectangle;
+  dropAcc: number;
+}
+
+/**
+ * operai lontani: posizione mondo (piedi) e tipo. Fuori dalla sagoma della navetta
+ * (corsie |X| <= 48): il primo sul marciapiede sinistro, il secondo sul bordo destro
+ * della carreggiata, specchiato per fumare con la mano verso l'asse.
+ */
+const WORKERS: readonly { X: number; Z: number; kind: 0 | 1; mirror: boolean }[] = [
+  { X: -68, Z: 318, kind: 0, mirror: false },
+  { X: 56, Z: 300, kind: 1, mirror: true },
 ];
+/** cassa di birra del mondo 3, sul marciapiede destro accanto al secondo operaio */
+const CRATE = { X: 74, Z: 304 } as const;
+
+/** quota del piano di calpestio: carreggiata o marciapiede rialzato */
+const floorY = (X: number) => (Math.abs(X) >= ROAD.side ? TW.yf - ROAD.curbH : TW.yf);
 
 let lastBzz = 0;
 function playBzz(): void {
@@ -123,7 +195,8 @@ function playHum(start: boolean): void {
 }
 
 /** Disegna l'interno della galleria e avvia le animazioni; si ripulisce allo shutdown della scena. */
-export function buildTunnelWorld(scene: Phaser.Scene, _opts: { world: 2 | 3 } = { world: 2 }): void {
+export function buildTunnelWorld(scene: Phaser.Scene, opts: { world: 2 | 3 } = { world: 2 }): void {
+  const beer = opts.world === 3;
   const bd = registerTunnelSprites(scene);
   const add = (x: number, y: number, key: string, depth: number) =>
     scene.add.image(Math.round(x), Math.round(y), key).setOrigin(0).setDepth(depth);
@@ -178,17 +251,19 @@ export function buildTunnelWorld(scene: Phaser.Scene, _opts: { world: 2 | 3 } = 
   const debrisColors = [C.slate, C.silver, C.charcoal, C.plum];
   for (let i = 0; i < S.debrisPool; i++) {
     const rect = scene.add.rectangle(0, 0, 1, 1, col(pick(debrisColors))).setOrigin(0).setDepth(D_DEBRIS);
-    debris.push({ rect, X: 0, Z: 0 });
+    debris.push({ rect, X: 0, Z: 0, size: 1 });
   }
   const zNear = 105;
   const zFar = TW.tbmZ - 2;
   const resetDebris = (d: Debris, z: number) => {
     d.X = Math.round(rand(BELT.x0 + 3, BELT.x1 - 3));
     d.Z = z;
+    d.size = rand(S.debrisMinSize, S.debrisMaxSize);
   };
   const drawDebris = (d: Debris) => {
     const p = proj(d.X, BELT.y, d.Z);
-    const sz = d.Z < 190 ? 2 : 1;
+    // sasso di 12-23 cm: 3-4 px vicino, 1 px in fondo al nastro
+    const sz = Phaser.Math.Clamp(Math.round((d.size * TW.f) / d.Z), 1, S.debrisMaxPx);
     d.rect.setSize(sz, sz).setPosition(Math.round(p.x), Math.round(p.y) - sz);
   };
   debris.forEach((d, i) => {
@@ -208,6 +283,7 @@ export function buildTunnelWorld(scene: Phaser.Scene, _opts: { world: 2 | 3 } = 
   let vehAcc = 0;
   let vBeaconAcc = 0;
   let vBeaconOn = false;
+  let vBeaconKey = 'tw-vbeacon';
   let wheelFrame: 0 | 1 = 0;
   let wheelAcc = 0;
   let dustLeft = 0;
@@ -222,7 +298,13 @@ export function buildTunnelWorld(scene: Phaser.Scene, _opts: { world: 2 | 3 } = 
     const h = veh.height;
     const cx = Math.round(p.x);
     veh.setPosition(cx - w / 2, bottom - h + 1);
-    vBeacon.setPosition(cx - 1, bottom - h - 1);
+    // lampeggiante: 3x2 da vicino, 1 px da lontano
+    const bk = w >= VEHICLE_BEACON_BIG ? 'tw-vbeacon' : 'tw-vbeacon-s';
+    if (bk !== vBeaconKey) {
+      vBeaconKey = bk;
+      vBeacon.setTexture(`${bk}-${vBeaconOn ? 'on' : 'off'}`);
+    }
+    vBeacon.setPosition(cx - Math.floor(vBeacon.width / 2), bottom - h + 1 - vBeacon.height);
     vGlow.setVisible(vehFront);
     if (vehFront) {
       const gk = `tw-vglow${w}`;
@@ -232,31 +314,24 @@ export function buildTunnelWorld(scene: Phaser.Scene, _opts: { world: 2 | 3 } = 
   };
   drawVehicle();
 
-  // ---- operai lontani
-  const workers = WORKERS.map((wk) => {
-    const p = proj(wk.X, TW.yf, wk.Z);
-    const img = add(p.x - 3, p.y - 17, `tw-worker${wk.kind}-0`, D_WORKER);
-    return { img, kind: wk.kind, frame: 0, left: rand(S.workerMinMs, S.workerMaxMs) };
-  });
-
   // ---- fumi e polvere (pool)
   const puffs: Puff[] = [];
   for (let i = 0; i < S.smokePool; i++) {
     const img = add(0, 0, 'tw-smoke0-0', D_SMOKE).setVisible(false);
-    puffs.push({ img, x: 0, y: 0, drift: 0, set: 0, step: 0, active: false });
+    puffs.push({ img, x: 0, y: 0, drift: 0, set: 0, step: 0, steps: S.smokeSteps, active: false });
   }
   const drawPuff = (p: Puff) => {
-    const ph = Math.min(3, Math.floor((p.step * 4) / S.smokeSteps));
+    const ph = Math.min(3, Math.floor((p.step * 4) / p.steps));
     const key = `tw-smoke${p.set}-${ph}`;
     if (p.img.texture.key !== key) p.img.setTexture(key);
     const rows = SMOKE[p.set][ph];
     p.img.setPosition(Math.round(p.x - rows[0].length / 2), Math.round(p.y - rows.length / 2));
     p.img.setVisible(ph < 3 || p.step % 2 === 0);
   };
-  const spawnPuff = (x: number, y: number, set: 0 | 1, drift: number, pool: Puff[] = puffs) => {
+  const spawnPuff = (x: number, y: number, set: 0 | 1 | 2, drift: number, pool: Puff[] = puffs) => {
     const p = pool.find((q) => !q.active);
     if (!p) return undefined;
-    Object.assign(p, { x, y, set, drift, step: 0, active: true });
+    Object.assign(p, { x, y, set, drift, step: 0, steps: set === 2 ? S.cigSmokeSteps : S.smokeSteps, active: true });
     drawPuff(p);
     return p;
   };
@@ -264,9 +339,16 @@ export function buildTunnelWorld(scene: Phaser.Scene, _opts: { world: 2 | 3 } = 
     for (const p of pool) {
       if (!p.active) continue;
       p.step++;
-      if (p.step >= S.smokeSteps) {
+      if (p.step >= p.steps) {
         p.active = false;
         p.img.setVisible(false);
+        continue;
+      }
+      if (p.set === 2) {
+        // fumo di sigaretta: sale piano e piega dal lato della mano
+        if (p.step % 2 === 1) p.y -= 1;
+        if (p.step % 3 === 0) p.x += p.drift;
+        drawPuff(p);
         continue;
       }
       if (p.set === 0) p.y -= p.step % 2 === 0 ? 2 : 1;
@@ -279,8 +361,261 @@ export function buildTunnelWorld(scene: Phaser.Scene, _opts: { world: 2 | 3 } = 
   const dust: Puff[] = [];
   for (let i = 0; i < S.vehicleDustPool; i++) {
     const img = add(0, 0, 'tw-smoke1-0', D_VEH - 0.004).setVisible(false);
-    dust.push({ img, x: 0, y: 0, drift: 0, set: 1, step: 0, active: false });
+    dust.push({ img, x: 0, y: 0, drift: 0, set: 1, step: 0, steps: S.smokeSteps, active: false });
   }
+  // fumo delle sigarette (sbuffi da 1-2 px, in scala con gli operai lontani)
+  const cigPuffs: Puff[] = [];
+  for (let i = 0; i < S.cigSmokePool; i++) {
+    const img = add(0, 0, 'tw-smoke2-0', D_SMOKE).setVisible(false);
+    cigPuffs.push({ img, x: 0, y: 0, drift: 0, set: 2, step: 0, steps: S.cigSmokeSteps, active: false });
+  }
+
+  // ---- operai lontani: alti PERSON_H (1.8 m) alla loro profondità
+  const workers: Worker[] = WORKERS.map((wk) => {
+    const h = Math.round((PERSON_H * TW.f) / wk.Z);
+    registerWorkerSprites(scene, h, wk.kind, wk.mirror);
+    const p = proj(wk.X, floorY(wk.X), wk.Z);
+    const rows = h + WORKER_TOP;
+    const x0 = Math.round(p.x) - (WORKER_W >> 1);
+    const y0 = Math.round(p.y) - rows;
+    const dot = (c: number) => scene.add.rectangle(0, 0, 1, 1, col(c)).setOrigin(0).setDepth(D_WCIG).setVisible(false);
+    return {
+      img: add(x0, y0, workerKey(h, wk.kind, wk.mirror, 'tool0', 'down'), D_WORKER),
+      kind: wk.kind,
+      Z: wk.Z,
+      h,
+      mirror: wk.mirror,
+      x0,
+      y0,
+      feetY: y0 + rows - 1,
+      phase: 'work',
+      left: rand(S.breakMinMs, S.breakMaxMs),
+      frame: 0,
+      frameLeft: rand(S.workerMinMs, S.workerMaxMs),
+      r: 'tool0',
+      l: 'down',
+      breakLeft: 0,
+      lit: false,
+      ember: dot(C.orange),
+      emberAcc: 0,
+      emberHot: false,
+      flash: add(0, 0, 'tw-wflash', D_WCIG).setVisible(false),
+      flashAcc: 0,
+      puffsLeft: 0,
+      puffAcc: 0,
+      idleSmokeAcc: 0,
+      butt: dot(C.orange),
+      buttLeft: 0,
+      buttAcc: 0,
+      buttVx: 0,
+      buttVy: 0,
+      buttLanded: false,
+      drop: dot(C.white),
+      dropAcc: 0,
+    };
+  });
+  // mondo 3: cassa di birra accanto al secondo operaio
+  if (beer) {
+    const p = proj(CRATE.X, floorY(CRATE.X), CRATE.Z);
+    add(Math.round(p.x) - 1, Math.round(p.y) - 3, 'tw-crate', D_WORKER - 0.001);
+  }
+  // la navetta più vicina di un operaio gli passa davanti: l'operaio scende sotto la navetta
+  const sortWorkers = () => {
+    for (const w of workers) {
+      const d = vehZ < w.Z ? D_VEH - 0.01 : D_WORKER;
+      if (w.img.depth === d) continue;
+      w.img.setDepth(d);
+      for (const o of [w.ember, w.flash, w.butt, w.drop]) o.setDepth(d + 0.001);
+    }
+  };
+  sortWorkers();
+
+  /** punto dello sprite (coordinate non specchiate, WORKER_PTS) a schermo */
+  const wpt = (w: Worker, pt: readonly [number, number]) => ({
+    x: w.x0 + (w.mirror ? WORKER_W - 1 - pt[0] : pt[0]),
+    y: w.y0 + pt[1],
+  });
+  /** verso "in fuori" dal lato della sigaretta */
+  const out = (w: Worker) => (w.mirror ? -1 : 1);
+  // brace (o punta bianca ancora spenta) alla bocca o nella mano abbassata
+  const placeEmber = (w: Worker) => {
+    const atMouth = w.r === 'mouth';
+    const show = (w.lit || w.phase === 'place' || w.phase === 'light') && (atMouth || w.r === 'down');
+    w.ember.setVisible(show);
+    if (!show) return;
+    const p = wpt(w, atMouth ? WORKER_PTS.emberMouth : WORKER_PTS.emberDown);
+    w.ember.setPosition(p.x, p.y);
+    if (!w.lit) w.ember.setFillStyle(col(C.white));
+  };
+  const setPose = (w: Worker, r: WorkerArmR, l: WorkerArmL) => {
+    w.r = r;
+    w.l = l;
+    const key = workerKey(w.h, w.kind, w.mirror, r, l);
+    if (w.img.texture.key !== key) w.img.setTexture(key);
+    placeEmber(w);
+  };
+  const go = (w: Worker, phase: WorkerPhase, ms: number, r: WorkerArmR, l: WorkerArmL) => {
+    w.phase = phase;
+    w.left = ms;
+    setPose(w, r, l);
+  };
+  const dragGap = () => rand(S.cigDragGapMinMs, S.cigDragGapMaxMs);
+  const startBreak = (w: Worker) => {
+    w.breakLeft = rand(S.cigSmokeMinMs, S.cigSmokeMaxMs);
+    go(w, 'pocket', S.cigPocketMs, 'pocket', beer ? 'bottle' : 'down');
+  };
+  /** fine di una fase della pausa: decide la successiva */
+  const endPhase = (w: Worker) => {
+    switch (w.phase) {
+      case 'work':
+        startBreak(w);
+        // a volte si ferma anche il collega
+        for (const o of workers) if (o !== w && o.phase === 'work' && Math.random() < S.breakTogetherChance) startBreak(o);
+        break;
+      case 'pocket':
+        go(w, 'place', S.cigPlaceMs, 'mouth', w.l);
+        break;
+      case 'place': {
+        // accendino: lampi della fiammella sulla punta
+        go(w, 'light', S.cigLightMs, 'mouth', w.l);
+        const p = wpt(w, WORKER_PTS.emberMouth);
+        w.flash.setPosition(p.x - 1, p.y - 1).setVisible(true);
+        w.flashAcc = 0;
+        break;
+      }
+      case 'light':
+        w.flash.setVisible(false);
+        w.lit = true;
+        w.emberAcc = 0;
+        go(w, 'drag', S.cigDragMs, 'mouth', w.l);
+        break;
+      case 'drag':
+        // abbassa la mano e butta fuori il fumo
+        w.puffsLeft = S.cigExhalePuffs;
+        w.puffAcc = S.cigExhaleGapMs;
+        go(w, 'idle', dragGap(), 'down', w.l);
+        break;
+      case 'idle':
+        if (w.breakLeft <= 0) {
+          // finita: colpetto al mozzicone e si torna al lavoro
+          w.lit = false;
+          go(w, 'throw', S.cigThrowMs, 'throw', w.l);
+          const p = wpt(w, WORKER_PTS.butt);
+          w.butt.setPosition(p.x, p.y).setFillStyle(col(C.orange)).setVisible(true);
+          w.buttVx = out(w);
+          w.buttVy = -1;
+          w.buttLeft = 0;
+          w.buttAcc = 0;
+          w.buttLanded = false;
+        } else if (beer && Math.random() < S.beerChance) go(w, 'drinkUp', S.beerUpMs, 'down', 'drink');
+        else go(w, 'drag', S.cigDragMs, 'mouth', w.l);
+        break;
+      case 'drinkUp':
+        go(w, 'drinkTilt', S.beerTiltMs, 'down', 'tilt');
+        if (Math.random() < S.beerFoamChance) {
+          // goccia di schiuma che cola dalla mano
+          const p = wpt(w, WORKER_PTS.drip);
+          w.drop.setPosition(p.x, p.y).setVisible(true);
+          w.dropAcc = 0;
+        }
+        break;
+      case 'drinkTilt':
+        go(w, 'drinkDown', S.beerUpMs, 'down', 'drink');
+        break;
+      case 'drinkDown':
+        go(w, 'idle', dragGap(), 'down', 'bottle');
+        break;
+      case 'throw':
+        w.frame = 0;
+        go(w, 'work', rand(S.breakMinMs, S.breakMaxMs), 'tool0', 'down');
+        break;
+    }
+  };
+
+  const updateWorker = (w: Worker, dt: number) => {
+    if (w.phase === 'work') {
+      w.frameLeft -= dt;
+      if (w.frameLeft <= 0) {
+        w.frameLeft = rand(S.workerMinMs, S.workerMaxMs);
+        w.frame = w.frame === 0 ? 1 : 0;
+        setPose(w, w.frame === 0 ? 'tool0' : 'tool1', 'down');
+      }
+    } else w.breakLeft -= dt;
+    w.left -= dt;
+    if (w.left <= 0) endPhase(w);
+
+    // fiammella dell'accendino a lampi
+    if (w.phase === 'light') {
+      w.flashAcc += dt;
+      if (w.flashAcc >= S.cigFlashMs) {
+        w.flashAcc %= S.cigFlashMs;
+        w.flash.setVisible(!w.flash.visible);
+      }
+    }
+    // brace: arancio/rosso a riposo, giallo/bianco mentre tira
+    if (w.lit && w.ember.visible) {
+      const drag = w.phase === 'drag';
+      const ms = drag ? S.cigDragEmberMs : S.cigEmberMs;
+      w.emberAcc += dt;
+      if (w.emberAcc >= ms) {
+        w.emberAcc %= ms;
+        w.emberHot = !w.emberHot;
+      }
+      const c = col(drag ? (w.emberHot ? C.white : C.yellow) : w.emberHot ? C.orange : C.red);
+      if (w.ember.fillColor !== c) w.ember.setFillStyle(c);
+    }
+    // sbuffi dalla bocca dopo la tirata, filo di fumo dalla brace a riposo
+    if (w.puffsLeft > 0) {
+      w.puffAcc += dt;
+      if (w.puffAcc >= S.cigExhaleGapMs) {
+        w.puffAcc = 0;
+        w.puffsLeft--;
+        const p = wpt(w, WORKER_PTS.exhale);
+        spawnPuff(p.x, p.y, 2, out(w), cigPuffs);
+      }
+    } else if (w.lit && w.r === 'down') {
+      w.idleSmokeAcc += dt;
+      if (w.idleSmokeAcc >= S.cigIdleSmokeMs) {
+        w.idleSmokeAcc = 0;
+        spawnPuff(w.ember.x, w.ember.y - 1, 2, out(w), cigPuffs);
+      }
+    }
+    // mozzicone: vola in arco fino a terra, ci resta un attimo e si spegne
+    if (w.butt.visible) {
+      w.buttAcc += dt;
+      if (w.buttLanded) {
+        w.buttLeft -= dt;
+        if (w.buttAcc >= S.cigEmberMs) {
+          w.buttAcc %= S.cigEmberMs;
+          w.butt.setFillStyle(col(w.butt.fillColor === col(C.red) ? C.plum : C.red));
+        }
+        if (w.buttLeft <= 0) w.butt.setVisible(false);
+      } else if (w.buttAcc >= S.cigButtStepMs) {
+        w.buttAcc %= S.cigButtStepMs;
+        w.buttLeft++;
+        const x = w.butt.x + (w.buttLeft % 2 === 1 ? w.buttVx : 0);
+        let y = w.butt.y + w.buttVy;
+        w.buttVy = Math.min(2, w.buttVy + 1);
+        if (y >= w.feetY) {
+          y = w.feetY;
+          w.buttLanded = true;
+          w.buttLeft = S.cigButtMs;
+          w.butt.setFillStyle(col(C.red));
+        }
+        w.butt.setPosition(x, y);
+      }
+    }
+    // goccia di schiuma che cade
+    if (w.drop.visible) {
+      w.dropAcc += dt;
+      if (w.dropAcc >= S.beerDropStepMs) {
+        w.dropAcc %= S.beerDropStepMs;
+        w.drop.y += 1;
+        if (w.drop.y >= w.feetY) w.drop.setVisible(false);
+      }
+    }
+  };
+  let cigAcc = 0;
 
   // ---- stato
   let running = true;
@@ -485,7 +820,7 @@ export function buildTunnelWorld(scene: Phaser.Scene, _opts: { world: 2 | 3 } = 
         if (vehWait <= 0) vehStop = (vehStop + 1) % S.vehicleStops.length;
         if (vBeaconOn) {
           vBeaconOn = false;
-          vBeacon.setTexture('tw-vbeacon-off');
+          vBeacon.setTexture(`${vBeaconKey}-off`);
         }
       } else {
         const target = S.vehicleStops[vehStop];
@@ -505,11 +840,12 @@ export function buildTunnelWorld(scene: Phaser.Scene, _opts: { world: 2 | 3 } = 
           wheelFrame = wheelFrame === 0 ? 1 : 0;
         }
         drawVehicle();
+        sortWorkers();
         vBeaconAcc += step;
         if (vBeaconAcc >= S.vehicleBeaconMs) {
           vBeaconAcc %= S.vehicleBeaconMs;
           vBeaconOn = !vBeaconOn;
-          vBeacon.setTexture(vBeaconOn ? 'tw-vbeacon-on' : 'tw-vbeacon-off');
+          vBeacon.setTexture(`${vBeaconKey}-${vBeaconOn ? 'on' : 'off'}`);
         }
         // polvere leggera dietro le ruote
         dustLeft -= step;
@@ -527,14 +863,12 @@ export function buildTunnelWorld(scene: Phaser.Scene, _opts: { world: 2 | 3 } = 
       }
     }
 
-    // ---- operai
-    for (const w of workers) {
-      w.left -= dt;
-      if (w.left <= 0) {
-        w.left = rand(S.workerMinMs, S.workerMaxMs);
-        w.frame ^= 1;
-        w.img.setTexture(`tw-worker${w.kind}-${w.frame}`);
-      }
+    // ---- operai: lavoro e pausa sigaretta (birra nel mondo 3)
+    for (const w of workers) updateWorker(w, dt);
+    cigAcc += dt;
+    if (cigAcc >= S.cigSmokeStepMs) {
+      cigAcc %= S.cigSmokeStepMs;
+      stepPuffs(cigPuffs);
     }
   };
 

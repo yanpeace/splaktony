@@ -1207,9 +1207,50 @@ export const TUNNEL_WORLD = {
   vehicleDustPool: 8,
   vehicleDustMinMs: 120,
   vehicleDustMaxMs: 260,
-  /** operai lontani: cambio di posa */
+  /** detriti: lato del sasso in unità mondo (1 ≈ 5 cm), a schermo 1..debrisMaxPx px */
+  debrisMinSize: 2.5,
+  debrisMaxSize: 4.5,
+  debrisMaxPx: 4,
+  /** operai lontani: cambio di posa mentre lavorano */
   workerMinMs: 500,
   workerMaxMs: 1400,
+  /** pausa sigaretta: ogni breakMinMs..breakMaxMs di lavoro; con breakTogetherChance anche l'altro si ferma */
+  breakMinMs: 9000,
+  breakMaxMs: 20000,
+  breakTogetherChance: 0.5,
+  /** tira fuori il pacchetto (pocketMs), sigaretta in bocca (placeMs), accendino a lampi di flashMs per lightMs */
+  cigPocketMs: 600,
+  cigPlaceMs: 400,
+  cigLightMs: 720,
+  cigFlashMs: 90,
+  /** durata della pausa; tirate di dragMs ogni dragGapMinMs..Max (mano giù tra una e l'altra) */
+  cigSmokeMinMs: 7000,
+  cigSmokeMaxMs: 12000,
+  cigDragMs: 700,
+  cigDragGapMinMs: 1100,
+  cigDragGapMaxMs: 2300,
+  /** fumo: dopo ogni tirata exhalePuffs sbuffi ogni exhaleGapMs; dalla brace a riposo uno ogni idleSmokeMs */
+  cigExhalePuffs: 3,
+  cigExhaleGapMs: 170,
+  cigIdleSmokeMs: 650,
+  /** brace di 1 px: lampeggio a riposo (arancio/rosso) e durante la tirata (giallo/bianco) */
+  cigEmberMs: 280,
+  cigDragEmberMs: 100,
+  /** lancio del mozzicone: posa throwMs, volo a passi di buttStepMs, resta a terra buttMs */
+  cigThrowMs: 450,
+  cigButtStepMs: 60,
+  cigButtMs: 1400,
+  /** pool del fumo di sigaretta (sbuffi da 1-2 px), passo e durata in passi */
+  cigSmokePool: 10,
+  cigSmokeStepMs: 130,
+  cigSmokeSteps: 14,
+  /** mondo 3: tra una tirata e l'altra, con beerChance un sorso (su upMs, a garganella tiltMs) */
+  beerChance: 0.45,
+  beerUpMs: 260,
+  beerTiltMs: 800,
+  /** goccia di schiuma che cola dalla mano con probabilità foamChance, 1 px ogni dropStepMs */
+  beerFoamChance: 0.45,
+  beerDropStepMs: 70,
   /** ronzio della talpa ogni humMinMs..humMaxMs; bzz del neon al massimo ogni bzzMinGapMs */
   humMinMs: 6000,
   humMaxMs: 10000,

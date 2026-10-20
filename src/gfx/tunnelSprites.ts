@@ -47,12 +47,16 @@ export function proj(X: number, Y: number, Z: number): { x: number; y: number } 
   return { x: TW.vpX + (TW.f * X) / Z, y: TW.vpY + (TW.f * Y) / Z };
 }
 
-/** Talpa (fresa meccanica) a schermo: centro, raggio dello scudo e della testa, ultima riga visibile. */
+/**
+ * Talpa (fresa meccanica) a schermo: centro, raggio dello scudo e della testa, ultima riga visibile.
+ * Lo scudo coincide con la sezione della volta (r 120 a Z 350 = 34 px); la testa fresante la
+ * riempie quasi tutta (28 px = ~98 unità, ~4.9 m di raggio), resta solo l'anello dello scudo.
+ */
 export const TBM = {
   cx: 90,
   cy: Math.round(TW.vpY + (TW.f * TW.yc) / TW.tbmZ), // 167
   shieldR: 34,
-  cutterR: 23,
+  cutterR: 28,
   bottom: Math.floor(TW.vpY + (TW.f * TW.yf) / TW.tbmZ), // 190
 } as const;
 
@@ -797,7 +801,7 @@ function neonBar(L: Lamp): { on: IndexImage; dim: IndexImage; off: IndexImage } 
 
 // ---------------------------------------------------------------- talpa
 
-/** Scudo della talpa: anello giallo con strisce di pericolo, piastra arancio con bulloni, fari. */
+/** Scudo della talpa: anello giallo con strisce di pericolo e fari; dentro, il bordo scuro attorno alla testa. */
 export function tbmShield(): IndexImage {
   const R = TBM.shieldR;
   const x0 = TBM.cx - R;
@@ -817,21 +821,14 @@ export function tbmShield(): IndexImage {
         if (dy > 18) c = 2;
         if (dy < -25 && mod(dx - dy, 6) < 3) c = 0; // strisce di pericolo in alto
         if (rr > R - 1.6 && dy < -8 && dx < 0) c = 12; // riflesso
-      } else if (rr > 29) c = 0;
-      else if (rr > 24.3) {
-        c = dy > 10 ? 2 : 3;
-        if (dy < -12 && dx < 4) c = 4;
-        const ang = Math.atan2(dy, dx);
-        const sector = mod(ang / (Math.PI / 6), 1);
-        if (Math.abs(rr - 26.8) < 0.8 && (sector < 0.12 || sector > 0.88)) c = 0; // bulloni
-      } else c = 0;
+      } else c = 0; // fessura tra scudo e testa (la testa copre il resto)
       img.data[j * img.w + i] = c;
     }
   }
   // fari di lavoro ai lati (bianchi, fissi)
   const lamps = [
-    [-27, 4],
-    [26, 4],
+    [-31, 4],
+    [31, 4],
   ];
   for (const [lx, ly] of lamps) {
     blitRows(img, ['0000', '0cb0', '0bb0', '0000'], TBM.cx + lx - 1 - x0, TBM.cy + ly - 1 - y0);
@@ -852,7 +849,9 @@ export function tbmCutter(frame: number): IndexImage {
   const img = image(0, 0, n, n);
   const rot = (frame * (Math.PI * 2)) / SPOKES / CUTTER_FRAMES;
   const step = (Math.PI * 2) / SPOKES;
-  for (let j = 0; j < n; j++) {
+  const k = R / 23; // i dettagli erano disegnati per un raggio di 23 px
+  const rows = TBM.bottom - (TBM.cy - R) + 1; // sotto il pavimento non si vede
+  for (let j = 0; j < rows; j++) {
     for (let i = 0; i < n; i++) {
       const dx = i - R;
       const dy = j - R;
@@ -874,18 +873,18 @@ export function tbmCutter(frame: number): IndexImage {
         c = dx * 0.4 + dy > 9 ? 15 : 14;
         // aperture per lo smarino tra un raggio e l'altro
         const relMid = mod(phi, step) - step / 2;
-        if (rr > 8 && rr < R - 5 && Math.abs(rr * Math.sin(relMid)) < 1.4) c = 0;
+        if (rr > 8 * k && rr < R - 5 && Math.abs(rr * Math.sin(relMid)) < 1.4) c = 0;
         // raggi gialli con il lato in ombra
         if (Math.abs(perp) < 2 && along > 4) c = perp > 0.6 ? 3 : 4;
         // dischi taglienti sui raggi
-        for (const rd of [8, 13, 18]) {
+        for (const rd of [8 * k, 13 * k, 18 * k]) {
           if (Math.abs(along - rd) < 1.1 && Math.abs(perp) < 1.1) c = 12;
         }
         // dischi tra i raggi (sfalsati)
-        if (Math.abs(rr - 15.5) < 1 && Math.abs(rr * Math.sin(relMid)) > 3 && Math.abs(rr * Math.sin(relMid)) < 4.6) c = 13;
+        if (Math.abs(rr - 15.5 * k) < 1 && Math.abs(rr * Math.sin(relMid)) > 3 && Math.abs(rr * Math.sin(relMid)) < 4.6) c = 13;
       }
-      if (rr < 6) c = 0;
-      if (rr < 5) c = dx + dy < -1 ? 4 : 3; // mozzo
+      if (rr < 7) c = 0;
+      if (rr < 6) c = dx + dy < -1 ? 4 : 3; // mozzo
       if (rr < 1.6) c = 12;
       img.data[j * n + i] = c;
     }
@@ -944,58 +943,176 @@ export const SMOKE: readonly (readonly string[])[][] = [
   [smokeBlob(2.5, 0, 1), smokeBlob(4, 0, 2), smokeBlob(5.5, 0.12, 3), smokeBlob(7, 0.5, 4)],
   // polvere bassa: piccoli
   [['dd'], ['.d', 'de'], ['d.e', '.e.'], ['e..', '..e']],
+  // fumo di sigaretta lontano (Z ~300): un pixel che sale, si allarga e svanisce
+  [['c'], ['d'], ['dd'], ['e']],
 ];
 
 /** Luce di emergenza vicino all'uscita (3x3). */
 export const EMERGENCY_ON = ['.3.', '3c3', '.3.'];
 export const EMERGENCY_OFF = ['.1.', '1f1', '.1.'];
 
-/** Operaio lontano stilizzato (7x17), 2 pose. kind 0 con torcia, 1 con pala. */
-export function workerRows(kind: 0 | 1, frame: 0 | 1): string[] {
-  const body = [
-    '..444..',
-    '.44444.',
-    '..333..',
-    '..333..',
-    '.55555.',
-    '5555555',
-    '5cc5cc5',
-    '5555555',
-    '3555553',
-    '.55555.',
-    '.99999.',
-    '.99.99.',
-    '.99.99.',
-    '.99.99.',
-    '.99.99.',
-    '.99.99.',
-    '.00.00.',
-  ];
-  const g = body.map((r) => r.split(''));
-  if (kind === 0) {
-    // braccio destro alzato con la torcia (frame 1 più alto)
-    if (frame === 0) {
-      g[5][6] = '5';
-      g[4][6] = 'c';
-    } else {
-      g[4][6] = '5';
-      g[3][6] = 'c';
-      g[8][6] = '.';
-    }
-  } else {
-    // pala: manico in diagonale, lama a terra (frame 0) o sollevata (frame 1)
-    const shaft = frame === 0 ? [[8, 0], [10, 0], [12, 0], [14, 0]] : [[7, 0], [9, 0], [11, 0], [12, 0]];
-    for (const [yy] of shaft) g[yy][0] = 'e';
-    if (frame === 0) {
-      g[15][0] = 'd';
-      g[16][0] = 'd';
-    } else {
-      g[13][0] = 'd';
-      g[14][0] = 'd';
+/**
+ * Scala: la galleria ha ~12 m di diametro (raggio 120), quindi 1 unità mondo ≈ 5 cm.
+ * Una persona è alta 1.8 m = PERSON_H unità: a schermo PERSON_H * f / Z px
+ * (12 px a Z 300, 11 px a Z 318).
+ */
+export const PERSON_H = 36;
+/** larghezza degli sprite degli operai: corpo di 3 px (~50 cm a Z 300) + braccia + attrezzi ai lati */
+export const WORKER_W = 7;
+/** righe libere sopra il caschetto (braccio alzato, bottiglia rovesciata) */
+export const WORKER_TOP = 2;
+
+/** braccio destro (quello della sigaretta / dell'attrezzo) */
+export type WorkerArmR = 'down' | 'pocket' | 'mouth' | 'throw' | 'tool0' | 'tool1';
+/** braccio sinistro (quello della birra nel mondo 3) */
+export type WorkerArmL = 'down' | 'bottle' | 'drink' | 'tilt';
+const WORKER_ARMS_R: readonly WorkerArmR[] = ['down', 'pocket', 'mouth', 'throw', 'tool0', 'tool1'];
+const WORKER_ARMS_L: readonly WorkerArmL[] = ['down', 'bottle', 'drink', 'tilt'];
+
+/**
+ * Punti notevoli dello sprite (coordinate non specchiate, riga 0 = prima riga libera):
+ * brace con la mano giù / alla bocca, mozzicone che parte nel lancio, bocca da cui
+ * esce il fumo, goccia di schiuma che cola dalla mano con la bottiglia.
+ */
+export const WORKER_PTS = {
+  emberDown: [6, WORKER_TOP + 5],
+  emberMouth: [6, WORKER_TOP + 1],
+  butt: [6, WORKER_TOP],
+  exhale: [5, WORKER_TOP],
+  drip: [0, WORKER_TOP + 2],
+} as const;
+
+/**
+ * Operaio lontano alto h px (+ WORKER_TOP righe libere), visto di fronte:
+ * caschetto giallo, faccia, gilet lime con banda riflettente, pantaloni blu,
+ * scarponi. kind 0 lavora con la torcia, 1 con la pala (in pausa la pala resta
+ * piantata accanto). Le braccia si compongono: destro r, sinistro l.
+ * mirror = specchiato (il secondo operaio fuma con la mano verso l'asse).
+ */
+export function workerRows(h: number, kind: 0 | 1, r: WorkerArmR, l: WorkerArmL, mirror: boolean): string[] {
+  const L = h - 7; // anca + gambe
+  const H = h + WORKER_TOP;
+  const t = WORKER_TOP;
+  const g: string[][] = Array.from({ length: H }, () => Array<string>(WORKER_W).fill('.'));
+  const put = (x: number, y: number, c: string) => {
+    if (x >= 0 && y >= 0 && x < WORKER_W && y < H) g[y][x] = c;
+  };
+  const vline = (x: number, y0: number, y1: number, c: string) => {
+    for (let y = y0; y <= y1; y++) put(x, y, c);
+  };
+  // ---- corpo
+  for (let x = 2; x <= 4; x++) {
+    put(x, t, '4'); // caschetto
+    put(x, t + 1, '3'); // faccia
+    vline(x, t + 2, t + 5, '5'); // gilet
+    put(x, t + 3, 'c'); // banda riflettente
+    put(x, t + 6, '9'); // anca
+  }
+  vline(2, t + 7, t + 5 + L, '9');
+  vline(4, t + 7, t + 5 + L, '9');
+  put(2, H - 1, '0');
+  put(4, H - 1, '0');
+
+  // ---- braccio destro
+  switch (r) {
+    case 'down':
+      vline(5, t + 2, t + 4, '5');
+      put(5, t + 5, '3');
+      break;
+    case 'pocket': // mano al taschino: tira fuori il pacchetto / l'accendino
+      vline(5, t + 2, t + 4, '5');
+      put(4, t + 5, '3');
+      break;
+    case 'mouth': // gomito in fuori, mano alla bocca
+      put(5, t + 2, '5');
+      put(6, t + 2, '5');
+      put(5, t + 1, '3');
+      break;
+    case 'throw': // colpetto in fuori: il mozzicone vola via
+      put(5, t + 2, '5');
+      put(6, t + 1, '5');
+      put(6, t, '3');
+      break;
+    case 'tool0':
+    case 'tool1': {
+      const up = r === 'tool1';
+      if (kind === 0) {
+        // torcia: davanti al petto (0) o alzata (1)
+        put(5, t + 2, '5');
+        if (up) {
+          put(6, t + 1, '5');
+          put(6, t, '3');
+          put(6, t - 1, 'c');
+        } else {
+          put(5, t + 3, '5');
+          put(6, t + 3, '3');
+          put(6, t + 2, 'c');
+        }
+      } else {
+        // pala: lama a terra (0) o sollevata di 2 righe (1)
+        const lift = up ? 2 : 0;
+        const hy = up ? t + 3 : t + 4;
+        vline(5, t + 2, hy - 1, '5');
+        put(5, hy, '3');
+        vline(6, hy - 1, H - 3 - lift, 'e');
+        vline(6, H - 2 - lift, H - 1 - lift, 'd');
+      }
+      break;
     }
   }
-  return g.map((r) => r.join(''));
+  // ---- braccio sinistro
+  switch (l) {
+    case 'down':
+    case 'bottle':
+      vline(1, t + 2, t + 4, '5');
+      put(1, t + 5, '3');
+      if (l === 'bottle') {
+        // bottiglia verde tenuta per il collo
+        put(1, t + 6, '6');
+        put(1, t + 7, '7');
+      }
+      break;
+    case 'drink': // alla bocca, bottiglia inclinata
+      put(1, t + 2, '5');
+      put(0, t + 2, '5');
+      put(1, t + 1, '3');
+      put(1, t, '6');
+      put(0, t - 1, '7');
+      break;
+    case 'tilt': // a garganella: bottiglia dritta in su
+      put(1, t + 2, '5');
+      put(0, t + 2, '5');
+      put(1, t + 1, '3');
+      put(1, t, '6');
+      put(1, t - 1, '7');
+      break;
+  }
+  // in pausa la pala resta piantata accanto (dal lato della birra)
+  if (kind === 1 && r !== 'tool0' && r !== 'tool1') {
+    vline(0, t + 4, H - 3, 'e');
+    vline(0, H - 2, H - 1, 'd');
+  }
+  const rows = g.map((row) => row.join(''));
+  return mirror ? rows.map((row) => [...row].reverse().join('')) : rows;
 }
+
+export const workerKey = (h: number, kind: 0 | 1, mirror: boolean, r: WorkerArmR, l: WorkerArmL) =>
+  `tw-wk${h}${kind}${mirror ? 'm' : ''}-${r}-${l}`;
+
+/** Crea (una volta) tutte le pose di un operaio alto h px. */
+export function registerWorkerSprites(scene: Phaser.Scene, h: number, kind: 0 | 1, mirror: boolean): void {
+  for (const r of WORKER_ARMS_R) {
+    for (const l of WORKER_ARMS_L) {
+      const key = workerKey(h, kind, mirror, r, l);
+      if (!scene.textures.exists(key)) makeIndexTexture(scene, key, fromRows(workerRows(h, kind, r, l, mirror)));
+    }
+  }
+}
+
+/** Fiammella dell'accendino (3x3, ~45 cm di bagliore a Z 300). */
+export const LIGHTER_FLASH = ['.4.', '4c4', '.4.'];
+/** Cassa di birra (mondo 3): colli delle bottiglie verdi sopra la cassa rossa, ~40x30 cm a Z 300. */
+export const BEER_CRATE = ['6.6', '222', '212'];
 
 /**
  * Navetta da cantiere per gallerie (trasporto del personale) larga w px:
@@ -1006,7 +1123,7 @@ export function workerRows(kind: 0 | 1, frame: 0 | 1): string[] {
  * frame 0/1 = battistrada delle ruote spostato di una riga (ruote che girano).
  */
 export function vehicleRows(w: number, front: boolean, frame: 0 | 1): string[] {
-  const h = Math.max(11, Math.round(w * 0.96));
+  const h = Math.max(11, Math.round(w * VEHICLE_H_RATIO));
   const g: string[][] = Array.from({ length: h }, () => Array<string>(w).fill('.'));
   const put = (i: number, j: number, c: string) => {
     if (j >= 0 && j < h && i >= 0 && i < w) g[j][i] = c;
@@ -1174,8 +1291,14 @@ export function vehicleGlowRows(w: number): string[] {
   return rows;
 }
 
-/** Larghezza (mondo) della navetta: sta dentro una corsia (tra mezzeria e margine). */
-export const VEHICLE_W = 40;
+/**
+ * Larghezza (mondo) della navetta: 46 = 2.3 m, sta dentro una corsia (tra mezzeria e margine,
+ * 51 unità); alta VEHICLE_H_RATIO volte la larghezza (53 = 2.65 m, ~1.5 volte una persona).
+ */
+export const VEHICLE_W = 46;
+export const VEHICLE_H_RATIO = 1.15;
+/** sotto questa taglia il lampeggiante sul tetto è di 1 px (vero: ~20 cm) */
+export const VEHICLE_BEACON_BIG = 22;
 /** dalla taglia VEHICLE_SPIN_MIN in su le ruote girano a 2 frame */
 export const VEHICLE_SPIN_MIN = 18;
 export const vehicleKey = (w: number, front: boolean, frame: 0 | 1) => `tw-veh-${front ? 'f' : 'b'}${w}-${frame}`;
@@ -1190,8 +1313,8 @@ export function tunnelBackdrop(): TunnelBackdrop {
   return cached;
 }
 
-/** taglie pre-disegnate della navetta (larghezza a schermo) */
-export const VEHICLE_SIZES: readonly number[] = Array.from({ length: 11 }, (_, k) => 10 + k * 2);
+/** taglie pre-disegnate della navetta (larghezza a schermo): da 12 (oltre Z 350) a 34 (Z 135) */
+export const VEHICLE_SIZES: readonly number[] = Array.from({ length: 12 }, (_, k) => 12 + k * 2);
 
 export function registerTunnelSprites(scene: Phaser.Scene): TunnelBackdrop {
   const bd = tunnelBackdrop();
@@ -1209,7 +1332,8 @@ export function registerTunnelSprites(scene: Phaser.Scene): TunnelBackdrop {
   SMOKE.forEach((set, s) => set.forEach((rows, p) => makeIndexTexture(scene, `tw-smoke${s}-${p}`, fromRows(rows))));
   makeIndexTexture(scene, 'tw-emer-on', fromRows(EMERGENCY_ON));
   makeIndexTexture(scene, 'tw-emer-off', fromRows(EMERGENCY_OFF));
-  for (const k of [0, 1] as const) for (const fr of [0, 1] as const) makeIndexTexture(scene, `tw-worker${k}-${fr}`, fromRows(workerRows(k, fr)));
+  makeIndexTexture(scene, 'tw-wflash', fromRows(LIGHTER_FLASH));
+  makeIndexTexture(scene, 'tw-crate', fromRows(BEER_CRATE));
   for (const w of VEHICLE_SIZES) {
     for (const front of [true, false]) {
       for (const fr of w >= VEHICLE_SPIN_MIN ? ([0, 1] as const) : ([0] as const)) {
@@ -1221,5 +1345,7 @@ export function registerTunnelSprites(scene: Phaser.Scene): TunnelBackdrop {
   }
   makeIndexTexture(scene, 'tw-vbeacon-on', fromRows(['.3.', '343']));
   makeIndexTexture(scene, 'tw-vbeacon-off', fromRows(['.1.', '121']));
+  makeIndexTexture(scene, 'tw-vbeacon-s-on', fromRows(['4']));
+  makeIndexTexture(scene, 'tw-vbeacon-s-off', fromRows(['1']));
   return bd;
 }

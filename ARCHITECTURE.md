@@ -339,6 +339,10 @@ segnaposto `s`/`h`/`l` convertiti da `skin()` (costanti `SKIN_*` in
   cantiere (`buildRoom` + `bindSiteAmbient` + `bindCarCrash`); mondo 2 =
   dentro la galleria (`buildRoomBodies` + `buildTunnelWorld` da
   `entities/TunnelWorld.ts`, niente ambiente né incidente). Stessa fisica.
+  Scala della galleria: 1 unità mondo ≈ 5 cm, persona `PERSON_H` = 36, navetta
+  `VEHICLE_W` = 46 (gfx/tunnelSprites.ts), a schermo `misura * f / Z` px.
+  Operai: pausa sigaretta (numeri `cig*`/`break*` in `TUNNEL_WORLD`), nel mondo 3
+  anche birra (`beer*`) e cassa.
 - Menu: MONDO 1 / MONDO 2 sotto GIOCA; il 2 si sblocca a
   `WORLDS.unlockLevel` (lucchetto + "LV 5", al tocco `playError`).
 - GIOCA col mondo 2 → Game nel mondo 1 con `intro: true` (incidenti
