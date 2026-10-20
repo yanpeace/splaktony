@@ -370,6 +370,30 @@ segnaposto `s`/`h`/`l` convertiti da `skin()` (costanti `SKIN_*` in
 - Pulsante MENU nell'HUD (in basso al centro): ferma Shop/Settings/
   ProgressHUD/Game e torna al Menu.
 
+## 9c. Minigioco SPRITZ (`scenes/Spritz.ts`, `gfx/spritzSprites.ts`, `SPRITZ` in balance.ts)
+
+- Solo nei mondi 2 e 3: la UI mostra il pulsante arancio "SPRITZ NN%" sopra
+  NEGOZIO (legge `Game.world`; pulsa finché non è mai stato provato). Il tocco
+  ferma Shop/Settings e fa `scene.launch('Spritz', { world })`.
+- `Spritz` (scena sovrapposta, in `main.ts` sopra ProgressHUD): mette in pausa
+  Game, tendine nere a scatti, addormenta UI e ProgressHUD, "salita" sulla
+  talpa con zoom a scatti (`SPRITZ.climbZoom`). Uscita (ESCI o fine festa):
+  tendine, `wake` UI/HUD, `resume('Game')`, `scene.stop()`. Allo SHUTDOWN
+  riprende comunque Game e risveglia l'HUD.
+- Gioco: tieni premuto e trascina; il bersaglio sta `aimOffsetY` sopra il
+  dito, la lancia in basso lo segue e spara gocce (pool) che coprono una
+  griglia di celle da `SPRITZ.cell` px (`buildWallLayout(seed)`: celle di
+  parete, strati necessari, zone angolari, ordine di ripresa). Due strati per
+  cella (`chunkLayers` sui blocchi sporgenti); zona piena al `regionAutoFill`
+  → si completa da sola ("OK!"). Pompa: `pressure` cala spruzzando, si
+  ricarica mollando, a secco riparte a `lockoutResume`.
+- Percentuale = celle coperte / celle di parete. `spritz:progress` ogni
+  `saveEveryMs` e all'uscita; al rientro la copertura salvata si ricostruisce
+  a macchie (stesso seed = `completed * 3 + mondo`).
+- Al 100%: festa, `economy.add(spritzReward(completed, world))` ed emette
+  `spritz:done { reward }` (il save azzera la percentuale e incrementa
+  `completed`; `progression` dà `xpLevelFraction` dell'XP del livello).
+
 ## 10. Cosa NON c'è ancora (per i prossimi agenti)
 
 - Altre armi.

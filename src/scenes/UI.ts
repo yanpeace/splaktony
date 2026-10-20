@@ -6,6 +6,7 @@ import { formatCompact, measureText, pixelText, setPixelText } from '../gfx/pixe
 import { ArcadeButton, drawPanel } from '../gfx/ui';
 import { events, Subscriptions } from '../systems/events';
 import { getSave } from '../systems/save';
+import type { Game } from './Game';
 import { alignButtonHit } from './Shop';
 
 /**
@@ -78,6 +79,46 @@ export class UI extends Phaser.Scene {
       }),
     );
 
+    // --- minigioco SPRITZ (solo in galleria, mondi 2 e 3): sopra il negozio, con la percentuale
+    const game = this.scene.get('Game') as Game | null;
+    const world = game?.world ?? 1;
+    if (world !== 1) {
+      const spritzLabel = pixelText(this, 0, 0, '', C.white);
+      const setSpritzLabel = (percent: number) => {
+        setPixelText(spritzLabel, `SPRITZ ${Math.min(99, Math.floor(percent))}%`);
+        spritzLabel.setPosition(-Math.floor(spritzLabel.width / 2), -4);
+      };
+      setSpritzLabel(getSave().spritz.percent);
+      const spritzBtn = alignButtonHit(
+        new ArcadeButton(this, SCREEN.width - 3 - SPRITZ_BTN_W, wy - 17, {
+          w: SPRITZ_BTN_W,
+          h: 15,
+          fill: C.orange,
+          content: this.add.container(0, 0, [spritzLabel]),
+          onClick: () => {
+            if (this.scene.isActive('Spritz')) return;
+            this.scene.stop('Shop');
+            this.scene.stop('Settings');
+            this.scene.launch('Spritz', { world });
+          },
+        }),
+      );
+      // finché non l'ha mai provato il pulsante pulsa (arancio / rosso)
+      const s = getSave().spritz;
+      if (s.completed === 0 && s.percent === 0) {
+        const pulse = this.time.addEvent({
+          delay: 500,
+          loop: true,
+          callback: () => spritzBtn.setFill(Math.floor(this.time.now / 500) % 2 ? C.red : C.orange),
+        });
+        this.subs.on('spritz:progress', () => {
+          pulse.remove();
+          spritzBtn.setFill(C.orange);
+        });
+      }
+      this.subs.on('spritz:progress', (e) => setSpritzLabel(e.percent)).on('spritz:done', () => setSpritzLabel(0));
+    }
+
     // --- suggerimento iniziale lampeggiante
     const hint = pixelText(this, SCREEN.width / 2, 250, 'TOCCA TONY!', C.yellow).setOrigin(0.5, 0);
     const hint2 = pixelText(this, SCREEN.width / 2, 261, 'TRASCINA E LANCIA', C.silver).setOrigin(0.5, 0);
@@ -142,6 +183,9 @@ export class UI extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.subs.clear());
   }
 }
+
+/** larghezza del pulsante SPRITZ (entra "SPRITZ 99%") */
+const SPRITZ_BTN_W = 66;
 
 /** spazio per il nome dell'arma nel riquadro in basso (da x 17 al bordo a x 71) */
 const WEAPON_NAME_MAX_PX = 54;

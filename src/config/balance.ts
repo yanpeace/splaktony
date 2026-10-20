@@ -1908,3 +1908,115 @@ export const RIFLES = {
   rocketHitStopMs: 50,
   rocketShakeMs: 380,
 } as const;
+
+/**
+ * Minigioco SPRITZ (mondi 2 e 3): in cima alla talpa si spruzza calcestruzzo
+ * sulla parete di roccia della galleria. Coordinate a schermo (180x320).
+ */
+export const SPRITZ = {
+  // --- parete: griglia di copertura e geometria della vista
+  /** lato di una cella della griglia di copertura (px) */
+  cell: 4,
+  /** prima riga di parete spruzzabile (sopra c'è la barra in alto) */
+  wallTop: 26,
+  /** inizio del ponte della talpa (sotto non si spruzza) */
+  deckY: 242,
+  /** punto di fuga della galleria */
+  vpX: 90,
+  vpY: 150,
+  /** raggio del tratto già rivestito in fondo (non spruzzabile) */
+  innerR: 42,
+  /** carreggiata: cuneo dal punto di fuga, mezza larghezza = (y - vpY) * floorSlope */
+  floorSlope: 0.913,
+  /** profondità a schermo: v = depthK / raggio (roccia, centine e rete in prospettiva) */
+  depthK: 4000,
+  /** settori angolari della parete (zone che si completano con il "pop") */
+  regions: 8,
+  /** una zona coperta a questa frazione si completa da sola (niente caccia all'ultimo pixel) */
+  regionAutoFill: 0.92,
+  /** blocchi di roccia sporgente che vogliono più cemento */
+  chunks: 6,
+  /** distanza minima dal punto di fuga e tra due blocchi (px) */
+  chunkMinR: 70,
+  chunkGap: 26,
+  // --- strati di cemento per cella
+  /** cemento per coprire una cella normale / una cella di un blocco sporgente */
+  layersToCover: 2,
+  chunkLayers: 4,
+  /** da qui in su la cella mostra lo strato sottile */
+  thinAt: 0.6,
+  /** cemento aggiunto da una goccia al centro e al bordo della macchia */
+  dropPaintCenter: 0.6,
+  dropPaintEdge: 0.28,
+  /** raggio della macchia di una goccia (px): splatRadius + random(0..splatRadiusVar) */
+  splatRadius: 5,
+  splatRadiusVar: 3,
+  // --- lancia e getto
+  /** il bersaglio sta sopra il dito, così il getto si vede */
+  aimOffsetY: -28,
+  /** inseguimento della lancia verso il bersaglio (frazione per frame a 60 fps) */
+  aimFollow: 0.35,
+  /** lunghezza dello sprite della lancia (righe), scala (è vicina all'occhio) e base (sotto lo schermo, segue il bersaglio di baseFollow) */
+  lanceLen: 46,
+  lanceScale: 2,
+  lanceBaseY: 340,
+  baseFollow: 0.35,
+  /** gocce al secondo e velocità di volo (px/ms) */
+  dropsPerSec: 50,
+  dropSpeed: 0.34,
+  /** dispersione del getto attorno al bersaglio (px) e arco del volo (frazione della distanza) */
+  dropJitter: 7,
+  dropArc: 0.08,
+  maxDrops: 64,
+  /** una macchia "splat" animata ogni N gocce, polvere ogni M */
+  splatEvery: 3,
+  dustEvery: 7,
+  splatFrameMs: 45,
+  // --- colature
+  dripChance: 0.06,
+  maxDrips: 16,
+  /** la colatura scende di 1px ogni dripStepMs per dripMinPx..dripMaxPx, poi resta dripHoldMs */
+  dripStepMs: 90,
+  dripMinPx: 4,
+  dripMaxPx: 11,
+  dripHoldMs: 700,
+  // --- pressione della pompa
+  /** consumo e ricarica al secondo (1 = serbatoio pieno) */
+  pressureDrainPerSec: 0.17,
+  pressureRechargePerSec: 0.5,
+  /** la ricarica parte dopo questo tempo dal rilascio */
+  rechargeDelayMs: 220,
+  /** a secco: si riparte quando la pressione torna qui */
+  lockoutResume: 0.4,
+  /** sotto questa pressione il getto "tossisce" (gocce saltate) */
+  sputterBelow: 0.15,
+  // --- suoni
+  hissEveryMs: 110,
+  // --- salvataggio dell'avanzamento
+  /** 'spritz:progress' al massimo ogni saveEveryMs (e sempre all'uscita) */
+  saveEveryMs: 3000,
+  // --- premio al 100%
+  /** monete = (rewardBase + rewardPerCompleted * min(completati, rewardMaxCompleted)) * worldRewardMult[mondo - 1] */
+  rewardBase: 600,
+  rewardPerCompleted: 250,
+  rewardMaxCompleted: 12,
+  worldRewardMult: [1, 1, 1.5] as readonly number[],
+  /** XP premio = questa frazione dell'XP che serve per il livello corrente */
+  xpLevelFraction: 0.5,
+  // --- transizioni e festa
+  /** tendine nere a scatti (ingresso e uscita) */
+  wipeSteps: 5,
+  wipeStepMs: 40,
+  /** "salita" sulla talpa: zoom a scatti verso 1, un livello ogni climbStepMs */
+  climbZoom: [1.6, 1.4, 1.25, 1.12, 1] as readonly number[],
+  climbStepMs: 75,
+  /** festa al 100%: ritorno automatico dopo celebrateMs (un tocco la salta dopo celebrateMinMs) */
+  celebrateMs: 3200,
+  celebrateMinMs: 900,
+  celebrateCoins: 14,
+  coinFlyMs: 520,
+  coinStepMs: 40,
+  coinStaggerMs: 45,
+  /** scritta "OK!" quando una zona si completa */
+  regionPopMs: 650,
+} as const;
