@@ -9,6 +9,7 @@ import {
   PORTAL_X0,
   PORTAL_Y0,
   registerSiteSprites,
+  siteSkyTopKey,
   SITE_SPRITES,
   TUNNEL_SIGN,
 } from '../gfx/siteSprites';
@@ -107,7 +108,7 @@ export function drawSiteBackdrop(scene: Phaser.Scene, opts: SiteBackdropOptions 
   // ---- cielo e montagna (depth 0..0.3): l'HUD sta sopra il cielo scuro
   tile(0, 0, W, 156, 'site-sky', 0);
   // schermi lunghi: il cielo continua sopra lo 0, più scuro verso l'alto
-  if (SCREEN.extra > 0) tile(0, SCREEN.top, W, SCREEN.extra, 'site-sky-top', 0);
+  if (SCREEN.extra > 0) tile(0, SCREEN.top, W, SCREEN.extra, siteSkyTopKey(scene), 0);
   img(132, 60, 'site-cloud-a', 0.1);
   img(36, 68, 'site-cloud-b', 0.1);
   img(0, MOUNTAIN_Y0, 'site-mountain', 0.3);

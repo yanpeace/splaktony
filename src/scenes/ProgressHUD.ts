@@ -6,6 +6,7 @@ import { spawnParticles } from '../gfx/effects';
 import { ensurePixelFont, pixelText, setPixelText } from '../gfx/pixelFont';
 import { ArcadeButton, drawPanel } from '../gfx/ui';
 import { Subscriptions } from '../systems/events';
+import { bindRelayout } from '../systems/screenWatch';
 import {
   getCombo,
   getDailyGoals,
@@ -85,6 +86,8 @@ export class ProgressHUD extends Phaser.Scene {
     );
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.subs.clear());
+    // schermo cambiato: HUD rifatta con le misure nuove (addormentata durante SPRITZ: al risveglio)
+    bindRelayout(this, () => this.scene.restart());
     this.drawXp();
   }
 

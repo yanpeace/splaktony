@@ -41,8 +41,10 @@ export const TW = {
   groundY: 292,
   width: 180,
   height: 320,
-  /** prima riga dello sfondo: sugli schermi lunghi la volta continua sopra lo 0 (SCREEN.top <= 0) */
-  top: SCREEN.top,
+  /** prima riga dello sfondo: sugli schermi lunghi la volta continua sopra lo 0 (SCREEN.top <= 0, segue lo schermo dal vivo) */
+  get top(): number {
+    return SCREEN.top;
+  },
 } as const;
 
 /** Proiezione mondo → schermo (non arrotondata). */
@@ -1326,11 +1328,17 @@ export const vehicleKey = (w: number, front: boolean, frame: 0 | 1) => `tw-veh-$
 
 // ---------------------------------------------------------------- registrazione
 
-/** sfondi già calcolati, uno per mondo (~60 ms l'uno, poi restano per tutta la partita) */
+/** sfondi già calcolati, uno per mondo (~60 ms l'uno, poi restano finché non cambia l'altezza dello schermo) */
 const backdrops = new Map<number, TunnelBackdrop>();
+/** TW.top con cui sono stati calcolati gli sfondi in cache */
+let backdropTop = NaN;
 
 /** Sfondo del mondo calcolato una volta sola (l'intro lo pre-calcola durante l'attesa). */
 export function tunnelBackdrop(world = 2): TunnelBackdrop {
+  if (backdropTop !== TW.top) {
+    backdrops.clear();
+    backdropTop = TW.top;
+  }
   let bd = backdrops.get(world);
   if (!bd) {
     bd = buildBackdrop(world);
@@ -1372,9 +1380,30 @@ function swapWorldTextures(scene: Phaser.Scene, world: number): void {
 /** taglie pre-disegnate della navetta (larghezza a schermo): da 12 (oltre Z 350) a 34 (Z 135) */
 export const VEHICLE_SIZES: readonly number[] = Array.from({ length: 12 }, (_, k) => 12 + k * 2);
 
+/** TW.top delle texture di sfondo / ombre / neon ora create (NaN = nessuna) */
+let texTop = NaN;
+
+/**
+ * Cambiata l'altezza dello schermo: via le texture calcolate per la vecchia
+ * (sfondo, ombre e neon di tutti i mondi, anche parcheggiate). Chiamata da
+ * registerTunnelSprites, quando la scena vecchia (e le sue immagini) è già chiusa.
+ */
+function dropStaleTextures(scene: Phaser.Scene): void {
+  if (texTop === TW.top) return;
+  const tex = scene.textures;
+  const keys = [...worldKeys(), ...LAMPS.flatMap((_, i) => [`tw-neon${i}-on`, `tw-neon${i}-dim`, `tw-neon${i}-off`])];
+  for (const k of keys) {
+    if (tex.exists(k)) tex.remove(k);
+    for (let w = 1; w <= 3; w++) if (tex.exists(parkedKey(k, w))) tex.remove(parkedKey(k, w));
+  }
+  texWorld = -1;
+  texTop = TW.top;
+}
+
 export function registerTunnelSprites(scene: Phaser.Scene, world = activeWorld): TunnelBackdrop {
   activeWorld = world;
   const bd = tunnelBackdrop(world);
+  dropStaleTextures(scene);
   swapWorldTextures(scene, world);
   makeIndexTexture(scene, 'tw-bg', bd.bg);
   bd.shades.forEach((s, i) => makeIndexTexture(scene, `tw-shade${i}`, s));

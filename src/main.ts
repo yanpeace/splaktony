@@ -9,6 +9,7 @@ import { Settings, registerServiceWorker } from './scenes/Settings';
 import { UI } from './scenes/UI';
 import { ProgressHUD } from './scenes/ProgressHUD';
 import { Spritz } from './scenes/Spritz';
+import { watchScreen } from './systems/screenWatch';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -19,8 +20,9 @@ const game = new Phaser.Game({
   pixelArt: true,
   roundPixels: true,
   antialias: false,
-  // altezza logica dal rapporto dello schermo (config/screen.ts): sui telefoni
-  // lunghi niente bande nere; su finestre più larghe di 9:16 FIT mette le bande ai lati
+  // altezza logica dal rapporto dello schermo (config/screen.ts), seguita dal vivo
+  // da watchScreen: sui telefoni lunghi niente bande; su finestre più larghe di 9:16
+  // FIT mette le bande ai lati
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -46,6 +48,8 @@ const game = new Phaser.Game({
 });
 
 registerServiceWorker();
+// barre di Safari, avvio da Home, schermo intero, rotazione: altezza e margini dal vivo
+watchScreen(game);
 
 /** Overlay #crt (index.html) sopra l'area reale del canvas: una riga scura per pixel logico. */
 function syncCrt(): void {

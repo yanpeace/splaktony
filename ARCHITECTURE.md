@@ -21,8 +21,9 @@ npm run build
 
 1. **Risoluzione logica 180 x `SCREEN.height`** (verticale), `pixelArt`,
    `roundPixels`, `Scale.FIT`. Posizioni a schermo sempre intere (`Math.round`).
-   L'altezza si calcola all'avvio dal rapporto della finestra
-   (`config/screen.ts`, limiti in `SCREEN_FIT`): 320 su 9:16 e finestre più
+   L'altezza si calcola dal rapporto del riquadro `#game` (fisso a tutta la
+   finestra, `config/screen.ts`, limiti in `SCREEN_FIT`) e **segue la finestra
+   dal vivo** (vedi sotto): 320 su 9:16 e finestre più
    larghe, fino a 420 sui telefoni lunghi (390 su 9:19.5), così il canvas
    riempie lo schermo senza bande. Il **layout di base resta 180x320** e le
    righe in più (`SCREEN.extra`) stanno SOPRA:
@@ -37,9 +38,25 @@ npm run build
    - scene HUD (UI, ProgressHUD, Shop, Settings): coordinate 0..`SCREEN.height`,
      ancorate ai bordi (in basso `SCREEN.height - ...`).
    - notch / indicatore home: `SCREEN.safeTop` / `SCREEN.safeBottom` (px
-     logici da `env(safe-area-inset-*)`): l'HUD si sposta, lo sfondo no.
-   - cambio di forma della finestra: FIT riadatta, l'altezza si ricalcola alla
-     prossima apertura. L'overlay `#crt` lo allinea `main.ts` al canvas.
+     logici da `env(safe-area-inset-*)`, riletto a ogni misura): l'HUD si
+     sposta, lo sfondo no. Su iPhone con la pagina sotto la barra di stato
+     (app da Home, Safari di iOS 26) se env() dice 0 valgono i margini di
+     riserva `SAFE_FALLBACK` (Dynamic Island / notch / tasto Home).
+   - **dal vivo** (`systems/screenWatch.ts`): resize, rotazione, visualViewport,
+     schermo intero (debounce `SCREEN_WATCH`), più controlli dopo l'avvio e uno
+     periodico. Se l'altezza intera o i margini cambiano: `refreshScreen()`
+     aggiorna SUL POSTO `SCREEN`, `TOP_SHIFT` (`export let`) e
+     `ROOM_INNER.top`, poi `setGameSize` ed evento `screen:changed`. Ogni scena
+     chiama `bindRelayout(scene, relayout, canNow?)` nel `create` e si
+     ricostruisce (`scene.restart`; in pausa / addormentata aspetta di
+     ripartire). Game riparte nello stesso mondo senza zoom d'arrivo (l'attesa
+     dell'intro riprende da dov'era; durante l'auto che sale e il passaggio
+     aspetta), Spritz salva e riparte senza ingresso col timer dov'era.
+     Quindi: **niente costanti di modulo calcolate da `SCREEN` / `TOP_SHIFT`**
+     (calcolale nel `create`), e texture che dipendono dall'altezza con una
+     chiave per altezza (`site-sky-top-<extra>`, `sz-view<-top>`; gli sfondi
+     della galleria si rifanno quando cambia `TW.top`).
+     L'overlay `#crt` lo allinea `main.ts` al canvas.
 2. **Solo la palette Sweetie 16 + 1 rosa pelle** (`src/config/palette.ts`).
    Nel codice usa `C.<nome>` + `col()` (intero) o `hex()` (CSS). Mai colori
    letterali. L'indice 16 (`g`, `C.pink`) è riservato alla pelle di Tony.
@@ -97,6 +114,7 @@ src/
     save.ts             localStorage versionato: load/save/getSave/patchSave
     upgrades.ts         prezzi, costi e scaleStats dei potenziamenti (puro)
     feedback.ts         numeri, particelle, shake, hit-stop e suoni sui colpi
+    screenWatch.ts      altezza logica dal vivo: watchScreen(game), bindRelayout(scene, ...)
   scenes/
     Boot.ts             genera texture/font, init save + economy, avvia Game
     Game.ts             stanza, Tony, fisica a passo fisso, input → arma
@@ -139,6 +157,7 @@ events.peek('coins:changed');                     // ultimo payload, senza iscri
 | `world:changed` | `{ world: WorldId }` (`1 \| 2 \| 3`) | `Menu` (scelta MONDO 1 / 2 / 3) | il save memorizza `world` |
 | `spritz:progress` | `{ percent }` (0..100) | `Spritz` (minigioco) | il save memorizza `spritz.percent` |
 | `spritz:done` | `{ reward }` | `Spritz` al 100% | il save azzera `percent` e incrementa `spritz.completed` |
+| `screen:changed` | `{ height, safeTop, safeBottom }` | `systems/screenWatch` | altezza logica o margini sicuri cambiati: `SCREEN` è già aggiornato e il gioco ridimensionato. Le scene lo ascoltano con `bindRelayout` e si ricostruiscono |
 
 Per aggiungere un evento: aggiungi la chiave a `GameEvents` con il tipo del
 payload e una riga in questa tabella. Nomi in stile `area:azione`.

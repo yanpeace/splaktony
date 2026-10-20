@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { RIFLES, SCREEN, WEAPON_STATS } from '../config/balance';
+import { RIFLES, SCREEN, SCREEN_FIT, WEAPON_STATS } from '../config/balance';
 import { C, hex } from '../config/palette';
 import { noise, tone } from '../audio/sfx';
 import { acquireImage, hitStop, releaseImage, shake } from '../gfx/effects';
@@ -93,9 +93,10 @@ const VIEW: ViewSpec = {
 function ensureScopeTexture(scene: Phaser.Scene): void {
   if (scene.textures.exists(SCOPE_KEY)) return;
   const w = SCREEN.width * 2;
-  const h = SCREEN.height * 2;
+  // alta come lo schermo più lungo possibile: resta valida se l'altezza cambia dal vivo
+  const h = SCREEN_FIT.maxHeight * 2;
   const cx = SCREEN.width;
-  const cy = SCREEN.height;
+  const cy = SCREEN_FIT.maxHeight;
   const r = R.scopeRadius;
   const tex = scene.textures.createCanvas(SCOPE_KEY, w, h);
   if (!tex) return;

@@ -10,6 +10,7 @@ import { ArcadeButton, drawPanel } from '../gfx/ui';
 import { events } from '../systems/events';
 import { getLevel } from '../systems/progression';
 import { getSave } from '../systems/save';
+import { bindRelayout, scheduleScreenCheck } from '../systems/screenWatch';
 import type { GameData, WorldId } from './Game';
 
 /**
@@ -120,6 +121,8 @@ export class Menu extends Phaser.Scene {
     this.buildSwing();
     this.buildTitle();
     this.buildButtons();
+    // schermo cambiato (barre di Safari, rotazione...): menu rifatto con le misure nuove
+    bindRelayout(this, () => this.scene.restart());
   }
 
   // ---------------------------------------------------------- sfondo
@@ -364,13 +367,16 @@ function goFullscreenPortrait(): void {
     if (!document.fullscreenElement && typeof el.requestFullscreen === 'function') {
       el.requestFullscreen()
         .then(lockPortrait)
-        .catch(() => undefined);
+        .catch(() => undefined)
+        .finally(scheduleScreenCheck);
     } else {
       lockPortrait();
     }
   } catch {
     /* non supportato */
   }
+  // la finestra cambia misura subito dopo (schermo intero, barre che spariscono)
+  scheduleScreenCheck();
 }
 
 function lockPortrait(): void {
