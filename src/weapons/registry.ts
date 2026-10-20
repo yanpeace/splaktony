@@ -13,6 +13,10 @@ import { Lanciafiamme } from './Lanciafiamme';
 import { Fulmine } from './Fulmine';
 import { Ghiaccio } from './Ghiaccio';
 import { Tornado } from './Tornado';
+import { Minigun } from './Minigun';
+import { Raggio } from './Raggio';
+import { Plasma } from './Plasma';
+import { Gravita } from './Gravita';
 import type { Weapon, WeaponContext } from './Weapon';
 
 /**
@@ -43,6 +47,11 @@ export const WEAPON_REGISTRY: WeaponEntry[] = [
   { id: 'fulmine', create: (ctx) => new Fulmine(ctx) },
   { id: 'ghiaccio', create: (ctx) => new Ghiaccio(ctx) },
   { id: 'tornado', create: (ctx) => new Tornado(ctx) },
+  // ---- ARMI NUOVE: fantascienza ----
+  { id: 'minigun', create: (ctx) => new Minigun(ctx) },
+  { id: 'raggio', create: (ctx) => new Raggio(ctx) },
+  { id: 'plasma', create: (ctx) => new Plasma(ctx) },
+  { id: 'gravita', create: (ctx) => new Gravita(ctx) },
 ];
 
 export function findWeapon(id: string): WeaponEntry | undefined {
