@@ -139,12 +139,17 @@ export function drawSiteBackdrop(scene: Phaser.Scene, opts: SiteBackdropOptions 
 
 /** Cantiere completo: grafica + 4 corpi statici (fisica invariata). */
 export function buildRoom(scene: Phaser.Scene): MatterJS.BodyType[] {
+  drawSiteBackdrop(scene);
+  return buildRoomBodies(scene);
+}
+
+/**
+ * Solo la fisica della stanza: 4 corpi statici molto spessi con le superfici
+ * interne allineate a ROOM_INNER. Uguale in tutti i mondi (la grafica cambia).
+ */
+export function buildRoomBodies(scene: Phaser.Scene): MatterJS.BodyType[] {
   const { width: W, height: H } = SCREEN;
   const { left, right, top, bottom } = ROOM_INNER;
-
-  drawSiteBackdrop(scene);
-
-  // corpi statici: superfici interne allineate a ROOM_INNER, spessore enorme verso l'esterno
   const T = ROOM.solidThickness;
   const opts = { isStatic: true, friction: ROOM.friction, restitution: ROOM.restitution };
   const m = scene.matter.add;
