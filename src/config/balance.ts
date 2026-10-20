@@ -252,6 +252,85 @@ export const WEAPON_STATS = {
     boomSize: 21,
     shakePx: 4,
   },
+  // ---- ARMI NUOVE: fantascienza ----
+  minigun: {
+    price: 0, // prezzo in SHOP.prices
+    /** danno per proiettile (testa x2 = 13: sotto FX.strongHitDamage, niente hit-stop a raffica) */
+    damage: 6.6,
+    /** ms tra due colpi a canne lanciate */
+    cooldownMs: 34,
+    /** proiettili per colpo (le canne sparano a coppie) */
+    pellets: 2,
+    /** tempo per portare le canne a regime e per fermarle */
+    spinUpMs: 600,
+    spinDownMs: 900,
+    /** Δv nella direzione dello sparo (px/step) e scossa laterale alternata che fa "ballare" Tony */
+    impulse: 1.1,
+    dance: 1.4,
+    /** Δv verso l'alto a ogni colpo a segno: Tony saltella sotto la raffica */
+    lift: 1.5,
+    bodyShare: 0.02,
+    hitTolerance: 2,
+    /** raggio (px) della dispersione attorno al dito */
+    spread: 7,
+  },
+  raggio: {
+    price: 0, // prezzo in SHOP.prices
+    /** danno per parte al centro della piccola esplosione verde (cala col raggio) */
+    damage: 15,
+    cooldownMs: 200,
+    /** velocità dell'anello (px/step) */
+    speed: 7,
+    /** raggio del danno e della spinta (px), forza della spinta al centro (px/step) */
+    radius: 17,
+    pushRadius: 26,
+    pushStrength: 6,
+  },
+  plasma: {
+    price: 0, // prezzo in SHOP.prices
+    /** danno per parte al centro dell'esplosione a carica piena */
+    damage: 127,
+    /** pausa minima tra un rilascio e l'inizio della carica successiva */
+    cooldownMs: 250,
+    /** tempo di carica piena; sotto minCharge il colpo si spegne */
+    chargeMs: 1200,
+    minCharge: 0.35,
+    /** velocità della sfera (px/step): lenta */
+    speed: 2.2,
+    radius: 48,
+    pushRadius: 80,
+    pushStrength: 19,
+    /** saette in volo: danno = damage * boltShare, ogni boltEveryMs, fino a boltCount parti entro boltRange px */
+    boltShare: 0.3,
+    boltEveryMs: 110,
+    boltCount: 2,
+    boltRange: 46,
+  },
+  gravita: {
+    price: 0, // prezzo in SHOP.prices
+    /** piccolo danno allo sparo (il grosso arriva dagli urti) */
+    damage: 14,
+    cooldownMs: 120,
+    /** velocità di lancio (px/step, limitata da GRAB.maxThrowSpeed) + spinta extra a tutto il corpo */
+    throwSpeed: 18,
+    extraSpeed: 8,
+    /** presa tenuta almeno fullMs = sparo a piena potenza (prima: da minPower) */
+    fullMs: 350,
+    minPower: 0.45,
+    /** quota della distanza dito→arma di cui la parte viene tirata verso l'arma */
+    pull: 0.3,
+    /** la parte presa resta almeno lift px sopra il pavimento (Tony sollevato) */
+    lift: 36,
+    /** tolleranza (px) per agganciare una parte col raggio */
+    pickTolerance: 12,
+    /** tap senza presa su Tony: spintone */
+    puntImpulse: 8,
+    /** dopo lo sparo, per slamMs: ogni parte che sbatte contro la stanza perdendo più di
+     *  slamMinDv px/step fa danno extra = (Δv - slamMinDv) * slamScale (oltre all'urto normale) */
+    slamMs: 1000,
+    slamMinDv: 6,
+    slamScale: 4.4,
+  },
 } satisfies Record<string, WeaponStats>;
 
 // ---- FEATURE A: armi da lancio ----
@@ -402,6 +481,11 @@ export const SHOP = {
     mitragliatrice: 3700,
     granata: 9000,
     dinamite: 18000,
+    // ---- ARMI NUOVE: fantascienza ----
+    minigun: 40000,
+    raggio: 50000,
+    plasma: 65000,
+    gravita: 80000,
   } as Record<string, number>,
   /** prezzo per un'arma senza price e non presente in `prices` */
   defaultPrice: 1500,
@@ -792,4 +876,79 @@ export const WEATHER = {
   /** forzato da debug: gocciolio intenso per quanto, e a che ritmo */
   dripBurstMs: 20000,
   dripBurstEveryMs: [150, 450],
+} as const;
+
+// ---- ARMI NUOVE: fantascienza ----
+
+/**
+ * Costanti comuni delle armi di fantascienza (minigun, pistola a raggi,
+ * cannone al plasma, pistola gravità): viewmodel a schermo, pool, effetti.
+ */
+export const SCIFI = {
+  /** viewmodel: base (y del fondo, sopra la fascia HUD), rinculo massimo, depth */
+  viewBaseY: 296,
+  viewKickMaxPx: 2,
+  /** ms per recuperare 1px di rinculo */
+  viewKickRecoverMs: 40,
+  viewDepth: 30,
+  /** x della base a riposo (arma a destra, non copre Tony al centro), quanto segue il dito, limiti */
+  viewX: 128,
+  viewFollow: 0.3,
+  viewMinX: 104,
+  viewMaxX: 154,
+  /** inclinazione a scatti verso il dito: livelli per lato, gradi per livello, px in cima per livello */
+  viewLeans: 3,
+  viewLeanStepDeg: 14,
+  viewLeanPx: 2,
+  /** punto mirato a riposo */
+  idleAimX: 70,
+  idleAimY: 170,
+
+  // minigun
+  minigunBarrelMinMs: 120,
+  minigunBarrelMaxMs: 22,
+  minigunWhirMs: 55,
+  maxTracers: 16,
+  tracerMs: 70,
+  tracerLen: 14,
+  maxShells: 36,
+  shellEvery: 2,
+  shellGravity: 0.25,
+  shellBounce: 0.4,
+  shellRestMs: 900,
+  shellBlinkMs: 400,
+  shellDepth: 31,
+  shellFloorDepth: 17,
+
+  // pistola a raggi
+  rayMaxLive: 6,
+  rayFrameMs: 50,
+  rayHitTolerance: 2,
+  rayMaxFlightMs: 1500,
+  rayGlowMs: 120,
+
+  // plasma
+  plasmaMaxLive: 2,
+  plasmaFrameMs: 60,
+  maxBolts: 8,
+  boltMs: 90,
+  plasmaFlashFrames: 2,
+  plasmaWaveMs: 320,
+  plasmaWaveRadius: 64,
+  plasmaHitStopMs: 60,
+  plasmaShakePx: 5,
+  plasmaShakeMs: 420,
+  plasmaMaxFlightMs: 4000,
+
+  // pistola gravità
+  gravGrabId: 9000,
+  gravPullRampMs: 300,
+  gravOrbiters: 8,
+  gravOrbitRadius: 9,
+  gravHumMs: 90,
+  /** sopra questa velocità del dito (px/step) lo sparo segue il gesto invece della mira */
+  gravFlickSpeed: 4,
+  /** distanza dalla parete entro cui una frenata brusca conta come schianto; pausa per parte */
+  gravSlamWallPx: 12,
+  gravSlamCooldownMs: 150,
 } as const;

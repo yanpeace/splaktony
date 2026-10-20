@@ -5,6 +5,10 @@ import { Granata } from './Granata';
 import { Punch } from './Punch';
 import { Shuriken } from './Shuriken';
 import { Coltello } from './Coltello';
+import { Minigun } from './Minigun';
+import { Raggio } from './Raggio';
+import { Plasma } from './Plasma';
+import { Gravita } from './Gravita';
 import type { Weapon, WeaponContext } from './Weapon';
 
 /**
@@ -27,6 +31,11 @@ export const WEAPON_REGISTRY: WeaponEntry[] = [
   { id: 'mitragliatrice', create: (ctx) => new Mitragliatrice(ctx) },
   { id: 'granata', create: (ctx) => new Granata(ctx) },
   { id: 'dinamite', create: (ctx) => new Dinamite(ctx) },
+  // ---- ARMI NUOVE: fantascienza ----
+  { id: 'minigun', create: (ctx) => new Minigun(ctx) },
+  { id: 'raggio', create: (ctx) => new Raggio(ctx) },
+  { id: 'plasma', create: (ctx) => new Plasma(ctx) },
+  { id: 'gravita', create: (ctx) => new Gravita(ctx) },
 ];
 
 export function findWeapon(id: string): WeaponEntry | undefined {
