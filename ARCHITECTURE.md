@@ -45,6 +45,9 @@ npm run build
      sotto la barra di stato (index.html: barra opaca nell'app da Home, niente
      `viewport-fit=cover` dentro Safari su iPhone), così iOS 26 non la sfoca;
      in basso, nell'app da Home, se env() dice 0 vale `SAFE_FALLBACK.bottom`.
+     Margine "fantasma": nell'app da Home iOS dichiara env(top) anche con la
+     barra opaca (finestra 797 + 47 = schermo 844): se finestra + margine
+     arrivano al bordo dello schermo, `safeTop` = 0.
      Dentro Safari la barra in basso è del browser e non si toglie: il Menu lo
      dice (`isIosBrowser()`), le Impostazioni mostrano misure e modalità.
    - **dal vivo** (`systems/screenWatch.ts`): resize, rotazione, visualViewport,
