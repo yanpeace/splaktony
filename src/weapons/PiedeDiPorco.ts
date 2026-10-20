@@ -88,7 +88,7 @@ interface PendingHit {
  */
 export class PiedeDiPorco extends Weapon<CrowStats> {
   readonly id = 'piedediporco';
-  readonly name = 'PIEDIPORCO';
+  readonly name = 'PIEDE DI PORCO';
   readonly icon = CROW_ICON;
 
   private anims: MeleeAnims | null = null;

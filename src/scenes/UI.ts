@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { JUICE, ROOM_INNER, SCREEN } from '../config/balance';
 import { C } from '../config/palette';
 import { bindFlyingCoins } from '../gfx/juice';
-import { formatCompact, pixelText, setPixelText } from '../gfx/pixelFont';
+import { formatCompact, measureText, pixelText, setPixelText } from '../gfx/pixelFont';
 import { ArcadeButton, drawPanel } from '../gfx/ui';
 import { events, Subscriptions } from '../systems/events';
 import { getSave } from '../systems/save';
@@ -118,7 +118,7 @@ export class UI extends Phaser.Scene {
         'weapon:selected',
         (e) => {
           weaponIcon.setTexture(e.iconKey).setVisible(true);
-          setPixelText(weaponName, e.name);
+          setPixelText(weaponName, fitName(e.name, WEAPON_NAME_MAX_PX));
         },
         true,
       )
@@ -141,4 +141,26 @@ export class UI extends Phaser.Scene {
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.subs.clear());
   }
+}
+
+/** spazio per il nome dell'arma nel riquadro in basso (da x 17 al bordo a x 71) */
+const WEAPON_NAME_MAX_PX = 54;
+
+/**
+ * Nome che entra in `maxPx`: parole intere finché ci stanno, poi un punto
+ * ("FUCILE D'ASSALTO" → "FUCILE."); se non entra neanche la prima, la tronca.
+ */
+function fitName(name: string, maxPx: number): string {
+  if (measureText(name) <= maxPx) return name;
+  const words = name.split(' ');
+  let out = '';
+  for (const w of words) {
+    const next = out ? `${out} ${w}` : w;
+    if (measureText(`${next}.`) > maxPx) break;
+    out = next;
+  }
+  if (out) return `${out}.`;
+  let cut = name;
+  while (cut.length > 1 && measureText(`${cut}.`) > maxPx) cut = cut.slice(0, -1);
+  return `${cut}.`;
 }
