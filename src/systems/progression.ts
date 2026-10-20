@@ -307,8 +307,10 @@ export function initProgression(): void {
     const mult = comboHit(e.amount);
     updateGoals(e, mult);
   });
-  // minigioco SPRITZ completato: una bella fetta del livello corrente
-  events.on('spritz:done', () => addXp(Math.round(xpForLevel(level) * SPRITZ.xpLevelFraction)));
+  // minigioco SPRITZ completato in tempo: una bella fetta del livello corrente (a tempo scaduto premio 0, niente XP)
+  events.on('spritz:done', (e) => {
+    if (e.reward > 0) addXp(Math.round(xpForLevel(level) * SPRITZ.xpLevelFraction));
+  });
   window.addEventListener('pagehide', flushDaily);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushDaily();

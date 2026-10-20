@@ -85,13 +85,24 @@ export function viewKind(x: number, y: number): ViewKind {
 /** semiampiezza (gradi) del cuneo della carreggiata attorno alla verticale in basso */
 const FLOOR_HALF_DEG = (Math.atan(SPRITZ.floorSlope) * 180) / Math.PI;
 
-/** Zona angolare (0..regions-1) di un punto di parete: dal fianco sinistro, su per la volta, al fianco destro. */
+/** zone totali: settori angolari x anelli (alcune possono restare vuote, fuori dallo schermo) */
+export const REGION_COUNT = SPRITZ.regionSectors * (SPRITZ.regionRings.length + 1);
+
+/**
+ * Zona (0..REGION_COUNT-1) di un punto di parete: settore angolare (dal fianco
+ * sinistro, su per la volta, al fianco destro) x anello (dal fondo verso lo schermo).
+ */
 export function regionOf(x: number, y: number): number {
+  const S = SPRITZ.regionSectors;
   const deg = (Math.atan2(y - SPRITZ.vpY, x - SPRITZ.vpX) * 180) / Math.PI; // 0 = destra, 90 = giù
   const t = mod(deg + 90, 360); // 0 = su, in senso orario
   const start = 180 + FLOOR_HALF_DEG; // bordo sinistro del cuneo
   const span = 360 - 2 * FLOOR_HALF_DEG;
-  return clamp(Math.floor((mod(t - start, 360) / span) * SPRITZ.regions), 0, SPRITZ.regions - 1);
+  const sector = clamp(Math.floor((mod(t - start, 360) / span) * S), 0, S - 1);
+  const r = Math.hypot(x - SPRITZ.vpX, y - SPRITZ.vpY);
+  let ring = 0;
+  while (ring < SPRITZ.regionRings.length && r >= SPRITZ.regionRings[ring]) ring++;
+  return ring * S + sector;
 }
 
 // ---------------------------------------------------------------- sfondo: roccia, fondo rivestito, strada, ponte
@@ -334,7 +345,7 @@ export function buildWallLayout(seed: number): WallLayout {
   const rows = Math.ceil(H / cs);
   const need = new Uint8Array(cols * rows);
   const region = new Int8Array(cols * rows).fill(-1);
-  const regionCells: number[][] = Array.from({ length: SPRITZ.regions }, () => []);
+  const regionCells: number[][] = Array.from({ length: REGION_COUNT }, () => []);
   const rnd = rng(seed * 7919 + 17);
 
   // blocchi sporgenti: posizioni casuali (seed) sulla parete, lontani dal fondo e tra loro
