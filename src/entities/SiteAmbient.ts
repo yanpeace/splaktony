@@ -9,9 +9,8 @@ import { Subscriptions } from '../systems/events';
  * - gru a torre a sinistra (pilone x 21..27, braccio y 50..53 da x 8 a 162):
  *   carrello che scorre a scatti, gancio con una trave che dondola a scatti
  *   (frame pre-disegnati, niente rotazioni sub-pixel), lampeggiante rosso in cima;
- * - transenna (x 126..147) e cono (x 36..42) sulla strada, con lampeggianti
- *   giallo/arancio alternati;
- * - bandierina a 2 frame (x 152) e sbuffi di polvere dalla strada.
+ * - lampeggianti giallo/arancio alternati su transenna e cono dello sfondo;
+ * - bandierina a 2 frame (x 163) e sbuffi di polvere dalla strada.
  *
  * Prestazioni: 13 oggetti creati una volta sola (un'immagine statica per la
  * struttura della gru, il resto cambia solo texture/posizione); la polvere usa
@@ -162,30 +161,7 @@ const LAMP_Y_ON: SpriteData = ['.4.', '4c4', '.f.'];
 const LAMP_O_ON: SpriteData = ['.3.', '343', '.f.'];
 const LAMP_OFF: SpriteData = ['.1.', '111', '.f.'];
 
-function barrierSprite(): string[] {
-  const g = new Grid(0, 0, 22, 12);
-  for (let r = 0; r < 3; r++) {
-    for (let x = 0; x < 22; x++) g.set(x, r, ((x + r) >> 2) % 2 === 0 ? '2' : 'c');
-  }
-  for (const lx of [2, 19]) {
-    g.line(lx, 3, lx - 2, 10, 'e');
-    g.line(lx, 3, lx + 2, 10, 'e');
-    g.set(lx - 2, 11, 'f');
-    g.set(lx + 2, 11, 'f');
-  }
-  return g.rows();
-}
 
-const CONE: SpriteData = [
-  '...3...',
-  '..333..',
-  '..ccc..',
-  '..333..',
-  '.33333.',
-  '.ccccc.',
-  '.33333.',
-  'eeeeeee',
-];
 
 /** Palo + bandierina al vento (verso destra), 2 frame. */
 function flagSprite(frame: 0 | 1): string[] {
@@ -213,12 +189,14 @@ const DUST: readonly SpriteData[] = [
 
 const BEACON_X = TOWER_C - 1;
 const BEACON_Y = APEX_Y - 2;
-const BARRIER_X = 126;
-const BARRIER_Y = 171;
-const CONE_X = 36;
-const CONE_Y = 176;
-const FLAG_X = 152;
-const FLAG_Y = 150;
+/** sopra la transenna a terra (12, 279) e sulla punta del cono sullo sterrato (37, 157) */
+const LAMP_A_X = 14;
+const LAMP_A_Y = 276;
+const LAMP_B_X = 40;
+const LAMP_B_Y = 154;
+/** bandierina sullo sterrato dietro la strada, al bordo destro */
+const FLAG_X = 163;
+const FLAG_Y = 136;
 /** sbuffi di polvere: solo fuori dalla zona albero/incidente (x 60..120) */
 const DUST_SPANS: readonly [number, number][] = [
   [12, 52],
@@ -227,8 +205,9 @@ const DUST_SPANS: readonly [number, number][] = [
 const DUST_Y_MIN = 182;
 const DUST_Y_MAX = 185;
 
-const DEPTH_CRANE = 1.5;
-const DEPTH_LOAD = 1.6;
+/** gru dietro recinzione e attrezzi (1..1.2) ma davanti al palazzo (0.5) */
+const DEPTH_CRANE = 0.8;
+const DEPTH_LOAD = 0.9;
 const DEPTH_PROPS = 1.8;
 const DEPTH_DUST = 1.9;
 
@@ -249,8 +228,6 @@ function registerTextures(scene: Phaser.Scene): void {
   makeSprite(scene, 'site-lamp-y', LAMP_Y_ON);
   makeSprite(scene, 'site-lamp-o', LAMP_O_ON);
   makeSprite(scene, 'site-lamp-off', LAMP_OFF);
-  makeSprite(scene, 'site-barrier', barrierSprite());
-  makeSprite(scene, 'site-cone', CONE);
   makeSprite(scene, 'site-flag0', flagSprite(0));
   makeSprite(scene, 'site-flag1', flagSprite(1));
   DUST.forEach((d, i) => makeSprite(scene, `site-dust${i}`, d));
@@ -273,10 +250,9 @@ export function bindSiteAmbient(scene: Phaser.Scene): void {
   const trolley = add(trolleyX - 3, TROLLEY_Y, 'site-trolley', DEPTH_LOAD);
   const hang = add(trolleyX - HANG_CX, CABLE_Y, 'site-hang0', DEPTH_LOAD);
 
-  add(BARRIER_X, BARRIER_Y, 'site-barrier', DEPTH_PROPS);
-  add(CONE_X, CONE_Y, 'site-cone', DEPTH_PROPS);
-  const lampA = add(BARRIER_X + 1, BARRIER_Y - 3, 'site-lamp-y', DEPTH_PROPS);
-  const lampB = add(CONE_X + 2, CONE_Y - 3, 'site-lamp-off', DEPTH_PROPS);
+  // i lampeggianti stanno sopra la transenna e il cono disegnati dallo sfondo (Room.ts)
+  const lampA = add(LAMP_A_X, LAMP_A_Y, 'site-lamp-y', DEPTH_PROPS);
+  const lampB = add(LAMP_B_X, LAMP_B_Y, 'site-lamp-off', DEPTH_PROPS);
   const flag = add(FLAG_X, FLAG_Y, 'site-flag0', DEPTH_PROPS);
 
   const puffs: Puff[] = [];

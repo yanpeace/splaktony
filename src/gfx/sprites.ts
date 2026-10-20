@@ -154,74 +154,6 @@ const LEG_LOWER: SpriteData = [
 const STAR_A: SpriteData = ['..4..', '..4..', '44c44', '..4..', '..4..'];
 const STAR_B: SpriteData = ['.....', '..4..', '.4c4.', '..4..', '.....'];
 
-// ------------------------------------------------------------ stanza
-
-const WALLPAPER: SpriteData = [
-  '8f88888888888888',
-  '8f88888888888888',
-  '8f88888888888888',
-  '8f88888898888888',
-  '8f8888889a988888',
-  '8f88888898888888',
-  '8f88888888888888',
-  '8f88888888888888',
-  'ff88888888888888',
-  '8f88888888888888',
-  '8f88888888888888',
-  '8f88888888888888',
-  '8f88888888888888',
-  '8f88888888888888',
-  '8f88888888888888',
-  '8f88888888888888',
-];
-
-const BRICK: SpriteData = [
-  '00000000',
-  'ffff0fff',
-  'ffff0fff',
-  'ffff0fff',
-  '00000000',
-  '0fffffff',
-  '0fffffff',
-  '0fffffff',
-];
-
-const FLOOR: SpriteData = [
-  '0000000000000000',
-  '1111111101111111',
-  '1121111101111111',
-  '1111111101111211',
-  '0000000000000000',
-  '1111011111111111',
-  '1111011112111111',
-  '1111011111111111',
-];
-
-const PICTURE: SpriteData = [
-  '0000000000000000',
-  '0444444444444430',
-  '04aaaaaaaaaaaa30',
-  '04aaaaaaaa44aa30',
-  '04aaaaaaaa44aa30',
-  '04aaaaaaaaaaaa30',
-  '04aa55aaaaaaaa30',
-  '04a5555aaa66aa30',
-  '0455555566666630',
-  '0466666666666630',
-  '0433333333333330',
-  '0000000000000000',
-];
-
-const LAMP: SpriteData = [
-  '...000...',
-  '..0aaa0..',
-  '.0aaaaa0.',
-  '099999990',
-  '000000000',
-  '...4c4...',
-  '....4....',
-];
-
 // ------------------------------------------------------------ UI
 
 const COIN: SpriteData = [
@@ -267,11 +199,6 @@ export const SPRITES = {
   'tony-leg-lower': LEG_LOWER,
   'fx-star-a': STAR_A,
   'fx-star-b': STAR_B,
-  'room-wallpaper': WALLPAPER,
-  'room-brick': BRICK,
-  'room-floor': FLOOR,
-  'room-picture': PICTURE,
-  'room-lamp': LAMP,
   'ui-coin': COIN,
   'ui-speaker-on': SPEAKER_ON,
   'ui-speaker-off': SPEAKER_OFF,

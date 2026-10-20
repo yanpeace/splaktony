@@ -186,12 +186,13 @@ export class Menu extends Phaser.Scene {
     const head = this.add.image(0, L - 17, 'tony-head').setOrigin(0.5, 1);
     swing.add(head);
 
-    // braccia alzate che stringono le corde
+    // braccia alzate che stringono le corde: capovolte, così la manica sta alla
+    // spalla (in basso) e il guanto in alto sulla corda
     for (const side of [-1, 1]) {
-      const upper = this.add.image(side * 9, L - 13, 'tony-arm-upper').setOrigin(0.5, 1);
+      const upper = this.add.image(side * 9, L - 13, 'tony-arm-upper').setOrigin(0.5, 1).setFlipY(true);
       upper.angle = side * 10;
       const lower = this.add.image(side * 11, L - 22, 'tony-arm-lower');
-      lower.setOrigin(0.5, 1);
+      lower.setOrigin(0.5, 1).setFlipY(true);
       swing.add([upper, lower]);
     }
 
