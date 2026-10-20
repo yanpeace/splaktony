@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
+import { WORLDS } from '../config/balance';
 import { PALETTE_INT } from '../config/palette';
 
 /**
- * Sprite del MONDO 2: l'interno della galleria, generati da codice (Sweetie 16,
+ * Sprite dei MONDI 2 e 3: l'interno della galleria, generati da codice (Sweetie 16,
  * mai l'indice 16 rosa). Chiavi texture con prefisso `tw-`.
  *
  * Lo sfondo è un "ray-cast" fatto una volta sola: per ogni pixel si lancia un
@@ -232,8 +233,15 @@ const EXIT_SIGN: readonly string[] = [
   '0000000000000000000',
 ];
 
-function distanceSign(): string[] {
-  const txt = miniText('250 M', 'c');
+/** metri di galleria del mondo (WORLDS.meters, oltre l'ultimo resta l'ultimo valore) */
+export function worldMeters(world: number): number {
+  const m = WORLDS.meters;
+  return m[Math.max(0, Math.min(m.length - 1, world - 1))];
+}
+
+/** Cartello blu della distanza scavata ("250 M", "500 M"...), largo quanto il testo. */
+function distanceSign(meters: number): string[] {
+  const txt = miniText(`${meters} M`, 'c');
   const w = txt[0].length + 4;
   const rows: string[] = ['0'.repeat(w), '0' + 'a'.repeat(w - 2) + '0'];
   for (const r of txt) rows.push('09' + r.replace(/\./g, '9') + '90');
@@ -244,8 +252,14 @@ function distanceSign(): string[] {
 /** Cartelli appesi alla volta: centro in mondo, sprite già in scala (piatti verso chi guarda). */
 export const SIGNS = {
   exit: { X: -62, Y: -12, Z: 125, rows: EXIT_SIGN },
-  dist: { X: 60, Y: -13, Z: 150, rows: distanceSign() },
+  /** cartello della distanza del mondo 2; per gli altri mondi vedi distSign() */
+  dist: { X: 60, Y: -13, Z: 150, rows: distanceSign(worldMeters(2)) },
 } as const;
+
+/** cartello della distanza di un mondo della galleria (stessa posizione, testo da WORLDS.meters) */
+export function distSign(world: number): { X: number; Y: number; Z: number; rows: readonly string[] } {
+  return { ...SIGNS.dist, rows: distanceSign(worldMeters(world)) };
+}
 
 /** angolo in alto a sinistra a schermo di un cartello appeso */
 export function signTopLeft(s: { X: number; Y: number; Z: number; rows: readonly string[] }): { x: number; y: number } {
@@ -381,7 +395,8 @@ export interface TunnelBackdrop {
   bars: { on: IndexImage; dim: IndexImage; off: IndexImage }[];
 }
 
-export function buildBackdrop(): TunnelBackdrop {
+/** Sfondo della galleria per un mondo (cambia solo il cartello della distanza). */
+export function buildBackdrop(world = 2): TunnelBackdrop {
   const W: number = TW.width;
   const H: number = TW.groundY; // righe 0..291 calcolate col ray-cast; il terreno è disegnato a parte
   const N = W * H;
@@ -654,7 +669,7 @@ export function buildBackdrop(): TunnelBackdrop {
   const plot = (x: number, y: number, c: number) => {
     if (x >= 0 && y >= 0 && x < W && y < H) emis[y * W + x] = c;
   };
-  for (const s of [SIGNS.exit, SIGNS.dist]) {
+  for (const s of [SIGNS.exit, distSign(world)]) {
     const p = signTopLeft(s);
     s.rows.forEach((row, j) => {
       for (let q = 0; q < row.length; q++) if (row[q] !== '.') plot(p.x + q, p.y + j, parseInt(row[q], 16));
@@ -1305,19 +1320,56 @@ export const vehicleKey = (w: number, front: boolean, frame: 0 | 1) => `tw-veh-$
 
 // ---------------------------------------------------------------- registrazione
 
-let cached: TunnelBackdrop | null = null;
+/** sfondi già calcolati, uno per mondo (~60 ms l'uno, poi restano per tutta la partita) */
+const backdrops = new Map<number, TunnelBackdrop>();
 
-/** Sfondo calcolato una volta sola per tutta la partita (le texture restano nel TextureManager). */
-export function tunnelBackdrop(): TunnelBackdrop {
-  cached ??= buildBackdrop();
-  return cached;
+/** Sfondo del mondo calcolato una volta sola (l'intro lo pre-calcola durante l'attesa). */
+export function tunnelBackdrop(world = 2): TunnelBackdrop {
+  let bd = backdrops.get(world);
+  if (!bd) {
+    bd = buildBackdrop(world);
+    backdrops.set(world, bd);
+  }
+  return bd;
+}
+
+/** mondo della prossima registrazione (lo sceglie Game prima di buildTunnelWorld) */
+let activeWorld = 2;
+/** mondo le cui texture di sfondo/ombre occupano ora le chiavi fisse (-1 = nessuno) */
+let texWorld = -1;
+
+/** Sceglie il mondo della galleria: registerTunnelSprites userà il suo sfondo (cartello "250 M", "500 M"...). */
+export function setTunnelWorld(world: number): void {
+  activeWorld = world;
+}
+
+/** chiavi che dipendono dal mondo: sfondo e maschere d'ombra (i neon sono uguali ovunque) */
+const worldKeys = (): string[] => ['tw-bg', ...LAMPS.map((_, i) => `tw-shade${i}`)];
+/** chiave di parcheggio delle texture di un mondo non attivo */
+const parkedKey = (key: string, world: number) => `${key}@w${world}`;
+
+/**
+ * Mette sulle chiavi fisse (`tw-bg`, `tw-shade<i>`) le texture del mondo: quelle
+ * del mondo precedente vengono rinominate `<chiave>@w<mondo>` (niente da
+ * ricalcolare se ci si torna), quelle del nuovo mondo tornano al loro posto.
+ */
+function swapWorldTextures(scene: Phaser.Scene, world: number): void {
+  if (texWorld === world) return;
+  const tex = scene.textures;
+  for (const k of worldKeys()) {
+    if (texWorld >= 0 && tex.exists(k)) tex.renameTexture(k, parkedKey(k, texWorld));
+    if (tex.exists(parkedKey(k, world))) tex.renameTexture(parkedKey(k, world), k);
+  }
+  texWorld = world;
 }
 
 /** taglie pre-disegnate della navetta (larghezza a schermo): da 12 (oltre Z 350) a 34 (Z 135) */
 export const VEHICLE_SIZES: readonly number[] = Array.from({ length: 12 }, (_, k) => 12 + k * 2);
 
-export function registerTunnelSprites(scene: Phaser.Scene): TunnelBackdrop {
-  const bd = tunnelBackdrop();
+export function registerTunnelSprites(scene: Phaser.Scene, world = activeWorld): TunnelBackdrop {
+  activeWorld = world;
+  const bd = tunnelBackdrop(world);
+  swapWorldTextures(scene, world);
   makeIndexTexture(scene, 'tw-bg', bd.bg);
   bd.shades.forEach((s, i) => makeIndexTexture(scene, `tw-shade${i}`, s));
   bd.bars.forEach((b, i) => {

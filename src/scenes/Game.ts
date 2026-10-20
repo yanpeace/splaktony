@@ -8,7 +8,9 @@ import { bindSiteAmbient } from '../entities/SiteAmbient';
 import { bindCarCrash, driveIntoTunnel } from '../entities/CarCrash';
 import { TUNNEL } from '../entities/siteLayout';
 import { buildTunnelWorld, TUNNEL_WORLD_FOCUS } from '../entities/TunnelWorld';
-import { tunnelBackdrop } from '../gfx/tunnelSprites';
+import { bindTunnelDeep } from '../entities/TunnelDeep';
+import { setTunnelWorld, tunnelBackdrop, worldMeters } from '../gfx/tunnelSprites';
+import { pixelText } from '../gfx/pixelFont';
 import { isFrozen } from '../gfx/effects';
 import { dealDamage } from '../systems/damage';
 import { events, Subscriptions, type WorldId } from '../systems/events';
@@ -25,12 +27,14 @@ interface PointerState extends WeaponPointer {
 
 export type { WorldId };
 
-/** Dati di avvio: scene.start('Game', { world, intro }) / scene.restart({ world: 2 }). */
+/** Dati di avvio: scene.start('Game', { world, intro, introTo }) / scene.restart({ world: 2 }). */
 export interface GameData {
   /** 1 = cantiere (default), 2 = dentro la galleria (250 M), 3 = galleria più profonda (500 M) */
   world?: WorldId;
-  /** solo nel mondo 1: dopo WORLDS.introDelayMs l'auto entra nella galleria → mondo 2 */
+  /** solo nel mondo 1: dopo WORLDS.introDelayMs l'auto entra nella galleria → mondo introTo */
   intro?: boolean;
+  /** mondo in cui porta l'intro (2 = default, 3 = galleria profonda) */
+  introTo?: WorldId;
 }
 
 /** Punto (frazione dello schermo) attorno a cui zooma la camera: la bocca della galleria. */
@@ -48,10 +52,12 @@ let pointersAdded = false;
  * Altrimenti al rilascio è un "tap" e l'arma decide cosa fare.
  *
  * Mondi: 1 = cantiere (sfondo, animazioni, incidente), 2 = dentro la galleria
- * (stessa fisica, grafica di TunnelWorld, niente incidente). Intro del mondo 2:
- * si parte nel mondo 1 con intro = true (incidenti automatici spenti); dopo
- * WORLDS.introDelayMs l'auto entra nella galleria, poi zoom a scatti dentro la
- * bocca, dissolvenza e restart({ world: 2 }), che parte zoomato e fa zoom-out.
+ * (stessa fisica, grafica di TunnelWorld, niente incidente), 3 = galleria più
+ * profonda (TunnelWorld col cartello "500 M" + gli extra di TunnelDeep).
+ * Intro dei mondi 2 e 3: si parte nel mondo 1 con intro = true (incidenti
+ * automatici spenti); dopo WORLDS.introDelayMs l'auto entra nella galleria, poi
+ * zoom a scatti dentro la bocca, dissolvenza e restart({ world: introTo }),
+ * che parte zoomato, fa zoom-out e mostra i metri ("250 M", "500 M").
  * Tony resta giocabile nei 5 s e mentre l'auto sale; l'input si blocca solo
  * dal momento in cui l'auto entra (zoom + dissolvenza, < 1 s).
  */
@@ -85,9 +91,12 @@ export class Game extends Phaser.Scene {
     cam.setZoom(1).setOrigin(0.5).setScroll(0, 0);
 
     const intro = this.worldId === 1 && !!data.intro;
+    const introTo: WorldId = data.introTo === 3 ? 3 : 2;
     if (this.worldId !== 1) {
       buildRoomBodies(this);
+      setTunnelWorld(this.worldId); // sfondo col cartello dei metri di questo mondo
       buildTunnelWorld(this, { world: this.worldId }); // dentro la galleria: niente ambiente del cantiere né incidente
+      if (this.worldId === 3) bindTunnelDeep(this); // più in fondo: più sporco, più gente, più roba che si muove
     } else {
       buildRoom(this);
       bindSiteAmbient(this);
@@ -129,8 +138,8 @@ export class Game extends Phaser.Scene {
 
     if (intro) {
       // lo sfondo della galleria (~60 ms, poi in cache) si prepara durante l'attesa, non allo zoom
-      this.time.delayedCall(1000, () => tunnelBackdrop());
-      this.time.delayedCall(WORLDS.introDelayMs, () => driveIntoTunnel(this, () => this.enterTunnel()));
+      this.time.delayedCall(1000, () => tunnelBackdrop(introTo));
+      this.time.delayedCall(WORLDS.introDelayMs, () => driveIntoTunnel(this, () => this.enterTunnel(introTo)));
     }
     if (this.worldId !== 1) this.arriveInTunnel();
   }
@@ -139,10 +148,10 @@ export class Game extends Phaser.Scene {
     return this.worldId;
   }
 
-  // ---------------------------------------------------------------- passaggio al mondo 2
+  // ---------------------------------------------------------------- passaggio in galleria (mondo 2 / 3)
 
-  /** L'auto è entrata nella galleria: zoom a scatti nella bocca, nero, mondo 2. */
-  private enterTunnel(): void {
+  /** L'auto è entrata nella galleria: zoom a scatti nella bocca, nero, mondo di arrivo. */
+  private enterTunnel(target: WorldId): void {
     if (this.transitioning) return;
     this.transitioning = true;
     this.releaseAll();
@@ -155,19 +164,42 @@ export class Game extends Phaser.Scene {
     cam.setOrigin(ZOOM_FOCUS.x, ZOOM_FOCUS.y);
     this.stepZoom(WORLDS.zoomIn, () => {
       const black = PALETTE_INT[C.black];
-      cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.restart({ world: 2 } satisfies GameData));
+      cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.restart({ world: target } satisfies GameData));
       cam.fadeOut(WORLDS.fadeOutMs, (black >> 16) & 0xff, (black >> 8) & 0xff, black & 0xff);
     });
   }
 
-  /** Arrivo nel mondo 2: camera zoomata sulla bocca, schiarita e zoom-out a scatti fino a 1. */
+  /** Arrivo in galleria: camera zoomata sulla talpa, schiarita, zoom-out a scatti fino a 1, poi i metri. */
   private arriveInTunnel(): void {
     const cam = this.cameras.main;
     const black = PALETTE_INT[C.black];
     // si "esce" dalla talpa in fondo alla galleria
     cam.setOrigin(TUNNEL_WORLD_FOCUS.x / SCREEN.width, TUNNEL_WORLD_FOCUS.y / SCREEN.height).setZoom(WORLDS.zoomOut[0]);
     cam.fadeIn(WORLDS.fadeInMs, (black >> 16) & 0xff, (black >> 8) & 0xff, black & 0xff);
-    this.stepZoom(WORLDS.zoomOut.slice(1), () => cam.setZoom(1).setOrigin(0.5));
+    this.stepZoom(WORLDS.zoomOut.slice(1), () => {
+      cam.setZoom(1).setOrigin(0.5);
+      this.time.delayedCall(WORLDS.titleDelayMs, () => this.showDepthTitle());
+    });
+  }
+
+  /** Cartello a schermo con i metri del mondo ("500 M"): entra lampeggiando, resta un attimo, sparisce. */
+  private showDepthTitle(): void {
+    const big = pixelText(this, SCREEN.width / 2, 100, `${worldMeters(this.worldId)} M`, C.yellow).setOrigin(0.5).setScale(2);
+    const small = pixelText(this, SCREEN.width / 2, 116, `MONDO ${this.worldId}`, C.white).setOrigin(0.5);
+    const card = [big, small];
+    for (const t of card) t.setPosition(Math.round(t.x), Math.round(t.y)).setDepth(20);
+    let n = 0;
+    this.time.addEvent({
+      delay: WORLDS.titleBlinkMs,
+      repeat: WORLDS.titleBlinks * 2 - 1,
+      callback: () => {
+        n++;
+        for (const t of card) t.setVisible(n % 2 === 0);
+      },
+    });
+    this.time.delayedCall(WORLDS.titleMs, () => {
+      for (const t of card) t.destroy();
+    });
   }
 
   /** Imposta uno zoom ogni WORLDS.zoomStepMs (scatti, niente zoom continuo). */

@@ -343,16 +343,30 @@ segnaposto `s`/`h`/`l` convertiti da `skin()` (costanti `SKIN_*` in
   `VEHICLE_W` = 46 (gfx/tunnelSprites.ts), a schermo `misura * f / Z` px.
   Operai: pausa sigaretta (numeri `cig*`/`break*` in `TUNNEL_WORLD`), nel mondo 3
   anche birra (`beer*`) e cassa.
-- Menu: MONDO 1 / MONDO 2 sotto GIOCA; il 2 si sblocca a
-  `WORLDS.unlockLevel` (lucchetto + "LV 5", al tocco `playError`).
-- GIOCA col mondo 2 → Game nel mondo 1 con `intro: true` (incidenti
+- Menu: MONDO 1 / 2 / 3 sotto GIOCA; il 2 si sblocca a
+  `WORLDS.unlockLevel`, il 3 a `WORLDS.unlockLevel3` (lucchetto + "LV n", al
+  tocco `playError`). Un mondo salvato ma bloccato ripiega sul più alto sbloccato.
+- GIOCA col mondo 2 o 3 → Game nel mondo 1 con `intro: true, introTo` (incidenti
   automatici spenti: `bindCarCrash(scene, { auto: false })`). Dopo
   `WORLDS.introDelayMs` `driveIntoTunnel(scene, onInside)` (CarCrash.ts):
   l'auto segue la strada fino a `Z_FAR`, sagoma nel buio e lampo dei fanali.
   Quando entra: input bloccato, HUD nascosto, zoom a scatti (`WORLDS.zoomIn`)
   attorno alla bocca (origine camera, scroll sempre 0 per lo shake), fade al
-  nero, `scene.restart({ world: 2 })`, che parte zoomato e fa zoom-out
-  (`WORLDS.zoomOut`). Tony resta giocabile fino all'ingresso dell'auto.
+  nero, `scene.restart({ world: introTo })`, che parte zoomato, fa zoom-out
+  (`WORLDS.zoomOut`) e mostra a schermo i metri ("500 M" + "MONDO 3",
+  `WORLDS.title*`). Tony resta giocabile fino all'ingresso dell'auto.
+- Cartello dei metri: `gfx/tunnelSprites.ts` lo cuoce nello sfondo leggendo
+  `WORLDS.meters` (`worldMeters(world)`, `distSign(world)`): un mondo nuovo
+  ha il suo cartello senza codice in più. Sfondi in cache per mondo
+  (`tunnelBackdrop(world)`, pre-calcolato durante l'intro per `introTo`).
+  `Game` chiama `setTunnelWorld(world)` prima di `buildTunnelWorld`; le chiavi
+  fisse `tw-bg` / `tw-shade<i>` contengono sempre il mondo attivo (gli altri
+  restano parcheggiati come `<chiave>@w<mondo>`, rinominati al cambio).
+- Mondo 3 (500 M): stessa galleria + `bindTunnelDeep(scene)`
+  (`entities/TunnelDeep.ts`, numeri in `TUNNEL_DEEP`): velo scuro/rosso caldo
+  sullo sfondo, gocce dalla volta con cerchi nelle pozzanghere, ventilatore,
+  lampada appesa che dondola ai colpi forti, cartello PERICOLO con lucine,
+  mini escavatore, radio con le note, topo sul cordolo, polvere e sassolini.
 - Pulsante MENU nell'HUD (in basso al centro): ferma Shop/Settings/
   ProgressHUD/Game e torna al Menu.
 

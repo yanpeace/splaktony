@@ -988,14 +988,16 @@ export const CRASH = {
 
 /**
  * Mondi (scenes/Menu.ts, scenes/Game.ts): 1 = cantiere fuori dalla galleria,
- * 2 = dentro la galleria. Scegliendo il mondo 2 si parte nel mondo 1 con
- * l'intro: dopo introDelayMs l'utilitaria entra nella galleria, la camera
- * zooma dentro la bocca, dissolvenza al nero e restart di Game nel mondo 2,
- * che parte zoomato e fa zoom-out fino a 1.
+ * 2 = dentro la galleria (250 M), 3 = più in fondo (500 M). Scegliendo il
+ * mondo 2 o 3 si parte nel mondo 1 con l'intro: dopo introDelayMs l'utilitaria
+ * entra nella galleria, la camera zooma dentro la bocca, dissolvenza al nero e
+ * restart di Game nel mondo scelto, che parte zoomato e fa zoom-out fino a 1.
  */
 export const WORLDS = {
   /** livello giocatore che sblocca il mondo 2 */
   unlockLevel: 5,
+  /** livello giocatore che sblocca il mondo 3 (500 M) */
+  unlockLevel3: 10,
   /** metri di galleria scavati mostrati sul cartello per mondo (indice = mondo - 1); i mondi successivi seguiranno 1000, 2000, 4000 → boss finale */
   meters: [0, 250, 500, 1000, 2000, 4000] as readonly number[],
   /** attesa (ms di gioco) prima che l'auto dell'intro parta dal basso */
@@ -1008,6 +1010,92 @@ export const WORLDS = {
   /** dissolvenza al nero prima del restart e schiarita all'arrivo */
   fadeOutMs: 220,
   fadeInMs: 260,
+  /** cartello "250 M" / "500 M" a schermo all'arrivo in galleria: attesa dopo lo zoom-out, durata, lampeggi d'entrata */
+  titleDelayMs: 150,
+  titleMs: 1800,
+  titleBlinks: 3,
+  titleBlinkMs: 70,
+} as const;
+
+// ---- GALLERIA PROFONDA (MONDO 3) ----
+
+/**
+ * Extra del mondo 3 (entities/TunnelDeep.ts), sopra la galleria del mondo 2:
+ * luce più calda e scura, gocce dalla volta con cerchi nelle pozzanghere,
+ * ventilatore, lampada appesa che dondola ai colpi forti, mini escavatore,
+ * radio con le note, topo sul marciapiede, polvere di roccia, cartello
+ * PERICOLO con le lucine. Profondità in coordinate mondo della galleria
+ * (vedi gfx/tunnelSprites.ts), tempi in ms, velocità in unità mondo al secondo.
+ */
+export const TUNNEL_DEEP = {
+  /** velo sopra lo sfondo (sotto Tony): scuro + rosso caldo, più fitto in alto */
+  moodDarkAlpha: 0.22,
+  moodWarmAlpha: 0.16,
+  moodTopAlpha: 0.22,
+  moodTopH: 110,
+  /** gocce: una ogni dripMinMs..dripMaxMs da un punto a caso, caduta con gravità (mondo/s²) */
+  dripPool: 6,
+  dripMinMs: 350,
+  dripMaxMs: 1100,
+  dripGravity: 420,
+  /** cerchi nell'acqua: raggio massimo (mondo), passi e durata di un passo */
+  rippleR: 9,
+  rippleSteps: 5,
+  rippleStepMs: 90,
+  ripplePool: 5,
+  /** "plic" delle gocce: probabilità per goccia e pausa minima tra due */
+  plinkChance: 0.35,
+  plinkMinGapMs: 500,
+  /** ventilatore: un frame delle pale ogni fanFrameMs, ogni tanto rallenta */
+  fanFrameMs: 55,
+  fanSlowMs: 140,
+  fanSlowMinMs: 6000,
+  fanSlowMaxMs: 14000,
+  fanSlowLenMs: 2500,
+  /** lampada appesa: pendolo (lunghezza a schermo), smorzamento, spinta per colpo forte, passo di quantizzazione */
+  lampLen: 26,
+  lampGravity: 0.00002,
+  lampDamping: 0.9985,
+  lampKick: 0.0009,
+  lampKickPerDamage: 0.000004,
+  lampMaxSpeed: 0.0024,
+  lampStep: 0.07,
+  /** sfarfallio della lampada: ogni flickerMinMs..flickerMaxMs qualche scatto spento */
+  lampFlickerMinMs: 4000,
+  lampFlickerMaxMs: 10000,
+  lampFlickerSteps: 5,
+  lampFlickerStepMs: 60,
+  /** mini escavatore: un frame del braccio ogni digFrameMs, pausa tra due cicli, lampeggiante */
+  digFrameMs: 260,
+  digPauseMinMs: 900,
+  digPauseMaxMs: 2600,
+  beaconMs: 180,
+  /** radio: battito dell'altoparlante e una nota ogni noteMinMs..noteMaxMs che sale per noteSteps passi */
+  radioBeatMs: 300,
+  noteMinMs: 500,
+  noteMaxMs: 1100,
+  noteStepMs: 120,
+  noteSteps: 9,
+  notePool: 4,
+  /** topo: corre lungo il cordolo verso chi guarda, poi sparisce; velocità e pause */
+  ratSpeed: 70,
+  ratFleeMult: 2.4,
+  ratFrameMs: 70,
+  ratStepMs: 33,
+  ratWaitMinMs: 5000,
+  ratWaitMaxMs: 12000,
+  /** il topo si ferma ad annusare con questa probabilità per corsa */
+  ratSniffChance: 0.6,
+  ratSniffMs: 900,
+  /** polvere di roccia sospesa: granelli in pool, passo di deriva */
+  motePool: 14,
+  moteStepMs: 120,
+  /** colpo forte: sassolini che cadono dalla volta (spawnParticles) */
+  pebbleCount: 5,
+  /** cartello PERICOLO: lucine rosse alternate e dondolio dopo un colpo forte */
+  dangerBlinkMs: 420,
+  dangerSwingMs: 120,
+  dangerSwingSteps: 6,
 } as const;
 
 // ---- METEO ----
