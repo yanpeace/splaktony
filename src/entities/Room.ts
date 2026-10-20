@@ -16,7 +16,7 @@ import { roadAtY, TREE } from './siteLayout';
 
 /**
  * Cantiere di una galleria, in prospettiva (geometria in siteLayout.ts):
- * cielo, montagna con lo scavo a gradoni e il portale in fondo al centro,
+ * cielo, montagna con il fronte di scavo in roccia e il portale in fondo al centro,
  * strada di sabbia a curve che scende dalla galleria al bordo basso,
  * sterrato con oggetti in scala (grandi davanti, piccoli vicino alla
  * galleria), terreno di gioco in ghiaia (y 292..320) e tubi d'impalcatura
@@ -112,11 +112,9 @@ export function drawSiteBackdrop(scene: Phaser.Scene, opts: SiteBackdropOptions 
   // ---- piana: sterrato + strada a curve + terreno di gioco (depth 0.6)
   img(0, PLAIN_Y0, 'site-plain', 0.6);
 
-  // ---- portale della galleria e cartello (depth 0.65..0.66, sotto la gru)
+  // ---- portale della galleria e targa "GALLERIA" (depth 0.65..0.66, sotto la gru)
   img(PORTAL_X0, PORTAL_Y0, 'site-portal', 0.65);
-  pixelText(scene, TUNNEL_SIGN.x, TUNNEL_SIGN.y, TUNNEL_SIGN.text, C.navy, C.white)
-    .setOrigin(0.5, 0)
-    .setDepth(z(0.66));
+  img(TUNNEL_SIGN.x, TUNNEL_SIGN.y, 'site-tunnel-sign', 0.66);
 
   // ---- oggetti del cantiere in scala (depth 1..1.2)
   for (const p of PROPS) {

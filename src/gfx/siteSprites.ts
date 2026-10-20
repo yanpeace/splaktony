@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
-import { makeSprites, type SpriteData } from './pixelSprite';
-import { measureText } from './pixelFont';
+import { makeSprites, spriteSize, type SpriteData } from './pixelSprite';
 import { roadAtY, scaleAtY, TUNNEL } from '../entities/siteLayout';
 
 /**
@@ -103,8 +102,13 @@ export const TUNNEL_LAMPS: readonly { x: number; y: number }[] = [
   { x: TUNNEL.x - 20, y: TUNNEL.y - 17 },
   { x: TUNNEL.x + 17, y: TUNNEL.y - 17 },
 ];
-/** Cartello "GALLERIA" sopra il portale: centro x, riga alta del testo. */
-export const TUNNEL_SIGN = { x: TUNNEL.x, y: TUNNEL.y - 43, text: 'GALLERIA' } as const;
+/** Riga alta del muro di testa del portale (copertina in cemento). */
+const HEAD_TOP = TUNNEL.y - 37;
+/**
+ * Targa "GALLERIA" sul muro di testa, sopra l'arco: angolo in alto a sinistra
+ * della texture 'site-tunnel-sign' (micro-font 3x5, vedi tunnelSign()).
+ */
+export const TUNNEL_SIGN = { x: TUNNEL.x - 15, y: HEAD_TOP + 3, text: 'GALLERIA' } as const;
 /** Bordo superiore del terreno di gioco (linea netta). */
 const GROUND_Y = 291;
 
@@ -114,13 +118,35 @@ function mountainFootY(x: number): number {
   return Math.round(149 + 1.5 * Math.sin(x * 0.23) + Math.sin(x * 0.61 + 1));
 }
 
-/** Mezza larghezza dello scavo attorno al portale alla riga y (0 = fuori). */
-const CUT_TOP = 100;
-function cutHalfWidth(y: number): number {
-  if (y < CUT_TOP) return 0;
-  // a gradoni: ogni 9 px la parete scavata si allarga
-  const bench = Math.floor((y - CUT_TOP) / 9);
-  return 15 + bench * 5 + Math.min(3, (y - CUT_TOP) % 9);
+/** Hash deterministico 0..1 di una coppia di interi (dettagli fissi senza rumore). */
+function hash2(x: number, y: number, seed = 0): number {
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(seed, 2147483647);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/**
+ * Fronte di scavo attorno al portale: un taglio a cupola nel versante, con
+ * bordo alto irregolare. CUT_TOP = cresta al centro, CUT_HW = mezza larghezza
+ * alla base (dove il taglio si raccorda con il piede della montagna).
+ */
+const CUT_TOP = 99;
+const CUT_HW = 50;
+const CUT_JAG = (() => {
+  const r = rng(113);
+  const out: number[] = [];
+  let w = 0;
+  for (let x = 0; x < 180; x++) {
+    w = Math.max(-2.5, Math.min(2.5, w + (r() - 0.5) * 1.3));
+    out.push(w);
+  }
+  return out;
+})();
+/** Riga della cresta del taglio alla colonna x (Infinity = fuori dal taglio). */
+function cutEdgeY(x: number): number {
+  const dx = Math.abs(x + 0.5 - TUNNEL.x);
+  if (dx > CUT_HW) return Infinity;
+  return Math.round(CUT_TOP + 52 * (dx / CUT_HW) ** 2.6 + (x - TUNNEL.x) * 0.06 + 1.5 * Math.sin(x * 0.29) + CUT_JAG[x]);
 }
 
 // ------------------------------------------------------------ cielo
@@ -170,7 +196,7 @@ function cloud(w: number, h: number, blobs: [number, number, number][]): SpriteD
 /**
  * Montagna 180 x (156 - MOUNTAIN_Y0): cresta lontana argento, massiccio di
  * roccia ardesia con il fianco sinistro illuminato, prati e abeti sulle
- * pendici basse e, al centro, lo scavo a gradoni attorno al portale.
+ * pendici basse e, al centro, il fronte di scavo attorno al portale (cutFace).
  */
 function mountain(): SpriteData {
   const W = 180;
@@ -200,16 +226,22 @@ function mountain(): SpriteData {
     for (let sy = Math.min(ft, mt); sy <= 155; sy++) {
       let c: string;
       if (sy < mt) {
-        // cresta lontana: argento con ombre ardesia, foschia
-        c = sy === ft ? 'c' : (x + sy) % 5 === 0 || bayer(x, sy) < (sy - ft) / 30 ? 'e' : 'd';
+        // cresta lontana: argento, foschia ardesia solo verso il piede
+        c = sy === ft ? 'c' : bayer(x, sy) < (sy - ft - 6) / 24 ? 'e' : 'd';
+        if (hash2(x >> 2, sy >> 1, 5) < 0.06 && sy > ft + 2) c = 'e'; // vene di roccia
       } else {
         const depth = sy - mt;
         if (depth === 0) c = slope < 0 ? 'd' : 'e';
-        else if (slope < -0.6 && depth < 4) c = bayer(x, sy) < 0.6 ? 'd' : 'e';
-        else if (slope > 0.6 && depth < 6) c = bayer(x, sy) < 0.55 ? 'f' : 'e';
-        else c = bayer(x, sy) < 0.2 ? 'f' : 'e';
-        // crepacci diagonali
-        if ((x * 2 + sy * 3 + Math.floor(jag[x] * 3)) % 23 === 0 && depth > 2) c = 'f';
+        else if (slope < -0.6 && depth < 4) c = depth < 2 || bayer(x, sy) < 0.35 ? 'd' : 'e';
+        else if (slope > 0.6 && depth < 6) c = depth < 3 || bayer(x, sy) < 0.3 ? 'f' : 'e';
+        else c = 'e';
+        // strati inclinati della roccia, interrotti a tratti
+        const sv = sy + x * 0.18 + 2 * Math.sin(x * 0.05);
+        const layer = Math.floor(sv / 7);
+        if (Math.floor(sv) % 7 === 0 && hash2(x >> 3, layer, 1) > 0.35 && depth > 2) c = 'f';
+        else if (Math.floor(sv) % 7 === 1 && hash2(x >> 3, layer, 1) > 0.82 && depth > 2) c = 'd';
+        // fratture diagonali (rare)
+        if ((x * 2 + sy * 3 + Math.floor(jag[x] * 3)) % 37 === 0 && depth > 3) c = 'f';
         // prato sulle pendici basse (bordo frastagliato a retino)
         const gd = sy - gt;
         if (gd > 0 || (gd > -3 && bayer(x, sy) < (gd + 3) / 3)) {
@@ -236,25 +268,149 @@ function mountain(): SpriteData {
     g.set(x, Y(base), '0');
   }
 
-  // scavo a gradoni attorno al portale: terra fresca prugna/rossa, gradoni argento
-  for (let sy = CUT_TOP; sy <= 155; sy++) {
-    const hw = cutHalfWidth(sy);
-    const benchRow = (sy - CUT_TOP) % 9 === 0;
-    for (let x = TUNNEL.x - hw; x <= TUNNEL.x + hw; x++) {
-      const edge = x === TUNNEL.x - hw || x === TUNNEL.x + hw;
+  cutFace(g, Y);
+  return g.rows();
+}
+
+/**
+ * Fronte di scavo della galleria (sopra la montagna, sotto il portale):
+ * cresta con canaletta di guardia, un filo di terra vegetale, parete di
+ * roccia grigia a strati e fratture, spritz-beton con rete e chiodi attorno
+ * al muro di testa, terra smossa, massi e detriti alla base.
+ */
+function cutFace(g: Grid, Y: (sy: number) => number): void {
+  const cx = TUNNEL.x;
+  const foot = TUNNEL.y - 1;
+  // distanza (in px, 8 direzioni) dalla sagoma del portale, per lo spritz-beton
+  const SHOT = 5;
+  const pr = portal();
+  const dist = new Map<number, number>();
+  const key = (x: number, y: number) => y * 256 + x;
+  let front: [number, number][] = [];
+  pr.forEach((row, j) =>
+    [...row].forEach((ch, i) => {
+      if (ch === '.') return;
+      dist.set(key(PORTAL_X0 + i, PORTAL_Y0 + j), 0);
+      front.push([PORTAL_X0 + i, PORTAL_Y0 + j]);
+    }),
+  );
+  for (let d = 1; d <= SHOT + 1; d++) {
+    const next: [number, number][] = [];
+    for (const [x, y] of front) {
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          const k = key(x + ox, y + oy);
+          if (dist.has(k)) continue;
+          dist.set(k, d);
+          next.push([x + ox, y + oy]);
+        }
+      }
+    }
+    front = next;
+  }
+
+  // strati della roccia: limiti a distanza variabile (3..7 px)
+  const sr = rng(37);
+  const STRATA: number[] = [];
+  for (let y = CUT_TOP - 12; y < foot + 12; y += 3 + Math.floor(sr() * 5)) STRATA.push(y);
+  const rock: [number, number][] = [];
+
+  for (let x = cx - CUT_HW - 1; x <= cx + CUT_HW + 1; x++) {
+    const edge = cutEdgeY(x);
+    if (!Number.isFinite(edge)) continue;
+    const dx = x + 0.5 - cx;
+    const flat = Math.abs(cutEdgeY(x + 2) - cutEdgeY(x - 2)) <= 2; // cresta quasi orizzontale: berma con canaletta
+    // il fianco del taglio guarda verso il centro: a sinistra in ombra, a destra in luce
+    const sideL = cutEdgeY(x - 2) > edge + 1 || !Number.isFinite(cutEdgeY(x - 2));
+    const sideR = cutEdgeY(x + 2) > edge + 1 || !Number.isFinite(cutEdgeY(x + 2));
+    for (let sy = edge; sy <= foot; sy++) {
+      const wasSoft = '67'.includes(g.get(x, Y(sy)));
+      const k = sy - edge;
       let c: string;
-      if (edge) c = '0';
-      else if (benchRow) c = sy === CUT_TOP ? '0' : 'd';
-      else if ((sy - CUT_TOP) % 9 === 1) c = 'f'; // ombra sotto il gradone
+      if (k === 0) c = flat ? 'd' : wasSoft ? '1' : 'f'; // bordo in cemento della canaletta / ciglio
+      else if (k === 1) c = flat ? 'f' : wasSoft ? (hash2(x, sy, 3) < 0.25 ? '2' : '1') : 'e';
       else {
-        c = bayer(x, sy) < 0.3 ? '2' : '1';
-        if ((x * 7 + sy * 3) % 17 === 0) c = 'e'; // sassi
-        if (x > TUNNEL.x + hw - 3) c = 'f'; // fianco destro in ombra
+        // parete di roccia: strati di spessore variabile, leggermente inclinati
+        const sv = sy - dx * 0.1 + 1.2 * Math.sin(x * 0.17);
+        let layer = 0;
+        while (layer < STRATA.length - 1 && STRATA[layer + 1] <= sv) layer++;
+        const inLayer = Math.floor(sv - STRATA[layer]);
+        c = 'e';
+        if (inLayer === 0 && hash2(x >> 2, layer, 7) > 0.3) c = 'f'; // giunto di strato
+        else if (inLayer === 1 && dx > 0 && hash2(x >> 2, layer, 8) > 0.6) c = 'd'; // spigolo in luce
+        if (dx < 0 && sideL && k < 4) c = 'f'; // fianco sinistro in ombra
+        if (dx > 0 && sideR && k < 3 && c === 'e') c = 'd';
+        if (k === 2 && flat) c = 'f'; // ombra sotto la berma
+        if (c === 'e') rock.push([x, sy]);
+      }
+      // spritz-beton attorno al muro di testa, con bordo irregolare
+      const d = dist.get(key(x, sy)) ?? 99;
+      const lim = SHOT - (hash2(x >> 1, sy >> 1, 4) < 0.4 ? 1 : 0);
+      if (k > 1 && d <= lim) {
+        c = d === lim ? 'e' : 'd';
+        if (c === 'd' && (x + sy) % 2 === 0 && (x % 3 === 0 || sy % 3 === 0) && d > 1) c = hash2(x, sy, 6) < 0.5 ? 'e' : 'd'; // rete
+        const row = Math.floor((sy - 1) / 5);
+        if (sy % 5 === 1 && (x + (row & 1) * 3) % 6 === 0 && d >= 2 && d < lim) c = '0'; // chiodi
       }
       g.set(x, Y(sy), c);
     }
   }
-  return g.rows();
+
+  // fratture: brevi tratti obliqui sulla roccia nuda (non sullo spritz-beton)
+  const rockSet = new Set(rock.map(([x, y]) => key(x, y)));
+  const fr = rng(91);
+  for (let i = 0; i < 22; i++) {
+    let [x, y] = rock[Math.floor(fr() * rock.length)];
+    const dir = fr() < 0.5 ? -1 : 1;
+    const len = 3 + Math.floor(fr() * 4);
+    for (let j = 0; j < len; j++) {
+      if (!rockSet.has(key(x, y))) break;
+      g.set(x, Y(y), 'f');
+      if (j === 0 && rockSet.has(key(x - dir, y))) g.set(x - dir, Y(y), 'd');
+      y++;
+      if (fr() < 0.6) x += dir;
+    }
+  }
+
+  // terra smossa alla base (si raccorda con lo sterrato della piana)
+  for (let x = cx - 44; x <= cx + 44; x++) {
+    const top = foot - 3 - Math.round(1.5 + 1.5 * Math.sin(x * 0.37) + CUT_JAG[x]);
+    for (let sy = top; sy <= foot; sy++) {
+      let c = sy === top ? 'f' : hash2(x, sy, 10) < 0.18 ? '2' : '1';
+      if (sy > top && hash2(x, sy, 11) < 0.12) c = 'e'; // sassi
+      if (sy === foot && hash2(x, sy, 12) < 0.5) c = 'f';
+      g.set(x, Y(sy), c);
+    }
+  }
+  // massi ai piedi della parete (quelli dietro il portale restano coperti)
+  const rocks: [number, number, number][] = [
+    [54, foot - 1, 2.6],
+    [59, foot, 1.6],
+    [50, foot, 1.3],
+    [124, foot - 1, 2.4],
+    [128, foot, 1.5],
+    [121, foot, 1.2],
+  ];
+  for (const [rx, ry, rr] of rocks) {
+    for (let y = Math.floor(ry - rr * 1.6); y <= ry; y++) {
+      for (let x = Math.floor(rx - rr - 1); x <= rx + rr + 1; x++) {
+        const u = (x + 0.5 - rx) / (rr + 0.5);
+        const v = (y + 0.5 - (ry + 0.5)) / (rr * 1.5);
+        if (u * u + v * v > 1) continue;
+        let c = u + v < -0.7 ? 'd' : u + v > 0.3 ? 'f' : 'e';
+        if (y === ry) c = '0';
+        g.set(x, Y(y), c);
+      }
+    }
+  }
+  // detriti minuti
+  const r = rng(57);
+  for (let i = 0; i < 26; i++) {
+    const x = cx - 42 + Math.floor(r() * 84);
+    const y = foot - Math.floor(r() * 4);
+    g.set(x, Y(y), r() < 0.5 ? 'd' : 'e');
+    if (r() < 0.4) g.set(x + 1, Y(y), 'f');
+  }
 }
 
 // ------------------------------------------------------------ portale della galleria
@@ -270,7 +426,7 @@ function inArch(x: number, y: number, cx: number, by: number, rx: number, ry: nu
 /**
  * Portale 64x47 (angolo in PORTAL_X0, PORTAL_Y0): muro di testa in cemento,
  * anello ad arco, bocca nera con centine, muri d'ala, impalcatura a destra,
- * cartello sopra e due lampade gialle ai lati.
+ * ombra della targa sopra l'arco e due lampade gialle ai lati.
  */
 function portal(): SpriteData {
   const W = 64;
@@ -295,7 +451,7 @@ function portal(): SpriteData {
     }
   }
   // muro di testa
-  const topY = by - 30;
+  const topY = HEAD_TOP;
   for (let y = topY; y <= by; y++) {
     for (let x = cx - 21; x <= cx + 20; x++) {
       let c = (x + y * 3) % 11 === 0 ? 'f' : 'e';
@@ -308,7 +464,7 @@ function portal(): SpriteData {
     }
   }
   // giunti dei getti (casseri) orizzontali
-  for (const jy of [topY + 10, topY + 20]) {
+  for (const jy of [topY + 15, topY + 26]) {
     for (let x = cx - 20; x <= cx + 19; x++) if (x % 3 !== 0) set(x, jy, 'f');
   }
   // anello ad arco (3 px), conci chiari
@@ -355,14 +511,11 @@ function portal(): SpriteData {
     for (let k = 0; k <= 8; k++) set(cx + 22 + Math.round(k * 0.75), y0 + k, 'e');
   }
 
-  // cartello sopra il portale (il testo è un pixelText a parte)
-  const tw = measureText(TUNNEL_SIGN.text) + 5;
-  const sx = cx - Math.floor(tw / 2);
-  const sy = TUNNEL_SIGN.y - 2;
-  for (const px of [cx - 14, cx + 13]) rect(px, sy + 12, 1, topY - sy - 12, 'f');
-  rect(sx, sy, tw, 12, '0');
-  rect(sx + 1, sy + 1, tw - 2, 10, 'c');
-  rect(sx + 1, sy + 10, tw - 2, 1, 'd');
+  // ombra della targa sul muro di testa (la targa è la texture 'site-tunnel-sign')
+  const sw = spriteSize(TUNNEL_SIGN_ROWS).w;
+  const sh = TUNNEL_SIGN_ROWS.length;
+  rect(TUNNEL_SIGN.x + 1, TUNNEL_SIGN.y + sh, sw, 1, 'f');
+  rect(TUNNEL_SIGN.x + sw, TUNNEL_SIGN.y + 1, 1, sh, 'f');
 
   // lampade gialle ai lati della bocca (statiche) su una staffa
   for (const l of TUNNEL_LAMPS) {
@@ -375,6 +528,41 @@ function portal(): SpriteData {
   }
   return g.rows();
 }
+
+// ------------------------------------------------------------ targa della galleria (micro-font 3x5)
+
+/**
+ * Micro-font 3x5 (alcune lettere strette a 2 o 1 px) fatto a mano, solo per
+ * le lettere della targa: '1' = pixel acceso.
+ */
+const MICRO_FONT: Record<string, readonly string[]> = {
+  G: ['011', '100', '101', '101', '011'],
+  A: ['010', '101', '111', '101', '101'],
+  L: ['10', '10', '10', '10', '11'],
+  E: ['11', '10', '11', '10', '11'],
+  R: ['110', '101', '110', '101', '101'],
+  I: ['1', '1', '1', '1', '1'],
+};
+
+/**
+ * Targa stradale della galleria: scritta bianca su fondo blu, bordo nero,
+ * 1 px di margine attorno al testo (larga quanto l'anello dell'arco).
+ */
+function tunnelSign(text: string): SpriteData {
+  const glyphs = [...text].map((ch) => MICRO_FONT[ch]);
+  const tw = glyphs.reduce((s, gl) => s + gl[0].length, 0) + glyphs.length - 1;
+  const g = new Grid(tw + 4, 9);
+  g.rect(0, 0, tw + 4, 9, '0');
+  g.rect(1, 1, tw + 2, 7, '9');
+  g.rect(1, 1, tw + 2, 1, 'a'); // filo di luce in alto
+  let x = 2;
+  for (const gl of glyphs) {
+    gl.forEach((row, j) => [...row].forEach((b, i) => b === '1' && g.set(x + i, 2 + j, 'c')));
+    x += gl[0].length + 1;
+  }
+  return g.rows();
+}
+const TUNNEL_SIGN_ROWS = tunnelSign(TUNNEL_SIGN.text);
 
 // ------------------------------------------------------------ piana: terreno + strada a curve
 
@@ -705,6 +893,7 @@ export const SITE_SPRITES: Record<string, SpriteData> = {
   ]),
   'site-mountain': mountain(),
   'site-portal': portal(),
+  'site-tunnel-sign': TUNNEL_SIGN_ROWS,
   'site-plain': plain(),
   'site-cone-l': CONE_L,
   'site-cone-m': CONE_M,
