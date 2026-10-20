@@ -192,14 +192,23 @@ const baseScroll = new WeakMap<Phaser.Cameras.Scene2D.Camera, number>();
 const cameraBase = (cam: Phaser.Cameras.Scene2D.Camera) => baseScroll.get(cam) ?? 0;
 
 /**
+ * Scroll verticale "a riposo" della camera principale: lo shake oscilla
+ * attorno a questo valore e ci torna sopra. Da usare al posto di setScroll in
+ * ogni scena che usa effects (altrimenti il tick riporta la camera a 0).
+ */
+export function restScroll(scene: Phaser.Scene, y: number): void {
+  const cam = scene.cameras.main;
+  baseScroll.set(cam, y);
+  cam.setScroll(0, y);
+}
+
+/**
  * Camera principale ancorata in basso: il layout di base 0..320 occupa le
  * ultime righe dello schermo e le righe in più (schermi lunghi) mostrano
  * y < 0, da SCREEN.top in su. Scroll intero, anche durante lo shake.
  */
 export function anchorBottom(scene: Phaser.Scene): void {
-  const cam = scene.cameras.main;
-  baseScroll.set(cam, SCREEN.top);
-  cam.setScroll(0, SCREEN.top);
+  restScroll(scene, SCREEN.top);
 }
 
 // ---------------------------------------------------------------- hit-stop

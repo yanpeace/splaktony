@@ -6,6 +6,7 @@ import { drawSiteBackdrop } from '../entities/Room';
 import { anchorBottom } from '../gfx/effects';
 import { pixelText } from '../gfx/pixelFont';
 import { makeSprite, type SpriteData } from '../gfx/pixelSprite';
+import { isIosBrowser } from '../config/screen';
 import { ArcadeButton, drawPanel } from '../gfx/ui';
 import { events } from '../systems/events';
 import { getLevel } from '../systems/progression';
@@ -130,7 +131,15 @@ export class Menu extends Phaser.Scene {
   private buildBackground(): void {
     // stesso cantiere del gioco, tutto a depth 0 (titolo, altalena e pulsanti sopra)
     drawSiteBackdrop(this, { flat: true });
-    pixelText(this, SCREEN.width / 2, SCREEN.baseHeight - 15 - SCREEN.safeBottom, 'V0.1', C.plum, C.black).setOrigin(0.5, 0);
+    const cx = SCREEN.width / 2;
+    if (isIosBrowser()) {
+      // dentro Safari la barra in basso è del browser: lo schermo intero vero si ha solo dall'icona sulla Home
+      const y = SCREEN.baseHeight - 21 - SCREEN.safeBottom;
+      pixelText(this, cx, y, 'SCHERMO INTERO: CONDIVIDI >', C.yellow, C.black).setOrigin(0.5, 0);
+      pixelText(this, cx, y + 9, 'AGGIUNGI ALLA SCHERMATA HOME', C.silver, C.black).setOrigin(0.5, 0);
+    } else {
+      pixelText(this, cx, SCREEN.baseHeight - 15 - SCREEN.safeBottom, 'V0.1', C.plum, C.black).setOrigin(0.5, 0);
+    }
   }
 
   // ---------------------------------------------------------- titolo

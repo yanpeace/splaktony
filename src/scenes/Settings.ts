@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { MENU, SCREEN } from '../config/balance';
+import { screenInfo } from '../config/screen';
 import { C, col, type ColorIndex } from '../config/palette';
 import { ensurePixelFont, pixelText, setPixelText } from '../gfx/pixelFont';
 import { ArcadeButton, drawPanel } from '../gfx/ui';
@@ -183,6 +184,10 @@ export class Settings extends Phaser.Scene {
       content: pixelText(this, 0, 0, '< INDIETRO', C.white).setOrigin(0.5),
       onClick: () => this.close(),
     });
+
+    // diagnostica per i problemi di schermo sul telefono: finestra (px CSS), app da Home o browser, margini env()
+    const si = screenInfo();
+    pixelText(this, SCREEN.width / 2, PANEL.y + PANEL.h - 9, `${si.w}X${si.h} ${si.app ? 'APP' : 'BROWSER'} ${si.safeTop}/${si.safeBottom}`, C.slate, C.black).setOrigin(0.5, 0);
 
     this.input.keyboard?.once('keydown-ESC', () => this.close());
 
