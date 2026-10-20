@@ -1322,3 +1322,76 @@ export const ELEMENTAL = {
   tornadoBottomMargin: 34,
   tornadoSoundMs: 220,
 } as const;
+
+// ---- ANIMAZIONI: mischia ----
+/**
+ * Animazioni di pugno, shuriken e coltello (durate dei frame in ms di gioco:
+ * seguono scene.time.timeScale e si fermano durante l'hit-stop).
+ */
+export const ANIM_MELEE = {
+  // ---- pugno (guantone)
+  /** frame di carica (piccolo, al bordo dello schermo) */
+  punchChargeMs: 26,
+  /** frame allungato con le scie */
+  punchSmearMs: 22,
+  /** primo frame d'impatto (silhouette bianca) */
+  punchFlashMs: 24,
+  /** impatto schiacciato contro il punto */
+  punchImpactMs: 60,
+  punchRecoilMs: 40,
+  /** uscita: due frame veloci verso il bordo */
+  punchExitMs: 24,
+  /** tap entro questo tempo dal precedente continuano la combo sinistro/destro */
+  comboWindowMs: 520,
+  /** ogni N colpi della combo arriva il montante */
+  uppercutEvery: 4,
+  uppercutDamageMult: 1.5,
+  uppercutImpulseMult: 1.45,
+  /** quota d'impulso a tutto il corpo nel montante (lancia Tony in alto) */
+  uppercutBodyShare: 0.75,
+  /** sotto questa distanza (px) dal lato di provenienza il guanto arriva in diagonale dal basso */
+  punchSideRoomPx: 38,
+  /** bersaglio più in alto di così (y): guanto in diagonale dal basso */
+  punchHighY: 175,
+  /** stelline che schizzano all'impatto (normale / montante) */
+  punchStars: 4,
+  uppercutStars: 6,
+  /** passo (px per frame) delle stelline */
+  starStepPx: 4,
+  starFrameMs: 40,
+  ringFrameMs: 34,
+
+  // ---- lanci (shuriken + coltello)
+  /** mano che scocca: frame di rilascio e di accompagnamento */
+  handReleaseMs: 40,
+  handFollowMs: 60,
+  /** copie sbiadite della scia e ogni quanto si campiona la posizione */
+  trailCopies: 3,
+  trailEveryMs: 16,
+  /** distanza (px) tra una copia della scia e l'altra */
+  trailGapPx: 4,
+  /** rotazione a scatti dello shuriken: ms per frame (22,5° a frame) */
+  shurikenSpinMs: 28,
+  /** rotazione del coltello in volo (rad/step, mostrata a 8 direzioni) */
+  knifeSpinPerStep: 0.42,
+  /** di quanto la punta del coltello sta davanti al centro (px) per il contatto */
+  knifeTipReach: 4,
+  /** frame della vibrazione quando si conficca */
+  vibFrameMs: 38,
+  /** luccichio mentre è conficcato: intervallo casuale [min, max] */
+  glintMinMs: 700,
+  glintMaxMs: 1600,
+  glintFrameMs: 50,
+  sparkFrameMs: 35,
+  /** rimbalzo sul pavimento dopo il distacco */
+  floorBounce: 0.45,
+  floorBounceMinVy: 2.2,
+  /** ventaglio di shuriken: tap entro questo tempo e distanza dal precedente */
+  fanWindowMs: 330,
+  fanRadiusPx: 22,
+  /** stelle al massimo in un ventaglio e apertura (rad) tra una e l'altra */
+  fanMax: 3,
+  fanSpread: 0.16,
+  /** danno delle stelle laterali del ventaglio (frazione) */
+  fanSideDamage: 0.5,
+} as const;
