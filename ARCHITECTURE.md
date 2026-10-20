@@ -116,7 +116,9 @@ events.peek('coins:changed');                     // ultimo payload, senza iscri
 | `ragdoll:grab` | `{ part }` | `Ragdoll` | |
 | `ragdoll:release` | `{ part, vx, vy }` | `Ragdoll` | velocità del lancio in px/step |
 | `settings:changed` | `{ muted }` | UI | sfx e save ascoltano |
-| `world:changed` | `{ world: 1 \| 2 }` | `Menu` (scelta MONDO 1 / MONDO 2) | il save memorizza `world` |
+| `world:changed` | `{ world: WorldId }` (`1 \| 2 \| 3`) | `Menu` (scelta MONDO 1 / 2 / 3) | il save memorizza `world` |
+| `spritz:progress` | `{ percent }` (0..100) | `Spritz` (minigioco) | il save memorizza `spritz.percent` |
+| `spritz:done` | `{ reward }` | `Spritz` al 100% | il save azzera `percent` e incrementa `spritz.completed` |
 
 Per aggiungere un evento: aggiungi la chiave a `GameEvents` con il tipo del
 payload e una riga in questa tabella. Nomi in stile `area:azione`.
@@ -299,6 +301,7 @@ segnaposto `s`/`h`/`l` convertiti da `skin()` (costanti `SKIN_*` in
 - Schema v1: `coins, totalDamage, coinRemainder, level, xp, selectedWeapon,
   ownedWeapons, weaponLevels, settings.muted`.
 - Schema v2: + `world: 1 | 2` (mondo scelto nel Menu, default 1; migrazione 1→2).
+- Schema v3: `world: WorldId` (anche 3) + `spritz: { percent, completed }` (minigioco SPRITZ; migrazione 2→3).
 - **Cambiare schema**: incrementa `SAVE_VERSION`, aggiorna `SaveData` e
   `defaultSave()`, aggiungi `MIGRATIONS[vecchia] = (d) => ({ ...d, version: nuova, ... })`.
   Non cancellare mai una migrazione.
@@ -329,7 +332,10 @@ segnaposto `s`/`h`/`l` convertiti da `skin()` (costanti `SKIN_*` in
 
 ## 9b. Mondi (`scenes/Game.ts`, `scenes/Menu.ts`, `WORLDS` in balance.ts)
 
-- `scene.start('Game', { world?: 1 | 2, intro?: boolean })`. Mondo 1 =
+- `WorldId = 1 | 2 | 3` (in `systems/events.ts`). Metri di galleria per mondo in `WORLDS.meters`
+  (0, 250, 500, 1000, 2000, 4000: i mondi successivi, poi il boss finale).
+  Mondi 2 e 3 = `buildTunnelWorld(scene, { world })`.
+- `scene.start('Game', { world?: WorldId, intro?: boolean })`. Mondo 1 =
   cantiere (`buildRoom` + `bindSiteAmbient` + `bindCarCrash`); mondo 2 =
   dentro la galleria (`buildRoomBodies` + `buildTunnelWorld` da
   `entities/TunnelWorld.ts`, niente ambiente né incidente). Stessa fisica.

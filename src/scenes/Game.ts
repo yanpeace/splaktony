@@ -11,7 +11,7 @@ import { buildTunnelWorld, TUNNEL_WORLD_FOCUS } from '../entities/TunnelWorld';
 import { tunnelBackdrop } from '../gfx/tunnelSprites';
 import { isFrozen } from '../gfx/effects';
 import { dealDamage } from '../systems/damage';
-import { events, Subscriptions } from '../systems/events';
+import { events, Subscriptions, type WorldId } from '../systems/events';
 import { bindHitFeedback } from '../systems/feedback';
 import { getSave } from '../systems/save';
 import { installUpgrades } from '../systems/upgrades';
@@ -23,11 +23,11 @@ interface PointerState extends WeaponPointer {
   samples: { x: number; y: number; t: number }[];
 }
 
-export type WorldId = 1 | 2;
+export type { WorldId };
 
 /** Dati di avvio: scene.start('Game', { world, intro }) / scene.restart({ world: 2 }). */
 export interface GameData {
-  /** 1 = cantiere (default), 2 = dentro la galleria */
+  /** 1 = cantiere (default), 2 = dentro la galleria (250 M), 3 = galleria più profonda (500 M) */
   world?: WorldId;
   /** solo nel mondo 1: dopo WORLDS.introDelayMs l'auto entra nella galleria → mondo 2 */
   intro?: boolean;
@@ -73,7 +73,7 @@ export class Game extends Phaser.Scene {
     this.accumulator = 0;
     this.pointers.clear();
     this.weapons.clear();
-    this.worldId = data.world === 2 ? 2 : 1;
+    this.worldId = data.world === 2 || data.world === 3 ? data.world : 1;
     this.transitioning = false;
     this.input.enabled = true;
     if (!pointersAdded) {
@@ -85,9 +85,9 @@ export class Game extends Phaser.Scene {
     cam.setZoom(1).setOrigin(0.5).setScroll(0, 0);
 
     const intro = this.worldId === 1 && !!data.intro;
-    if (this.worldId === 2) {
+    if (this.worldId !== 1) {
       buildRoomBodies(this);
-      buildTunnelWorld(this); // dentro la galleria: niente ambiente del cantiere né incidente
+      buildTunnelWorld(this, { world: this.worldId }); // dentro la galleria: niente ambiente del cantiere né incidente
     } else {
       buildRoom(this);
       bindSiteAmbient(this);
@@ -132,7 +132,7 @@ export class Game extends Phaser.Scene {
       this.time.delayedCall(1000, () => tunnelBackdrop());
       this.time.delayedCall(WORLDS.introDelayMs, () => driveIntoTunnel(this, () => this.enterTunnel()));
     }
-    if (this.worldId === 2) this.arriveInTunnel();
+    if (this.worldId !== 1) this.arriveInTunnel();
   }
 
   get world(): WorldId {

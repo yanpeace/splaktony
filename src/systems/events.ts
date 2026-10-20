@@ -40,6 +40,9 @@ export interface DamageEvent {
   crit?: boolean;
 }
 
+/** Mondi: 1 = cantiere, 2 = galleria (250 M), 3 = galleria più profonda (500 M). Metri in WORLDS.meters. */
+export type WorldId = 1 | 2 | 3;
+
 export interface GameEvents {
   /** Tony ha subito danno. Emesso SOLO da systems/damage.ts → dealDamage(). */
   damage: DamageEvent;
@@ -62,8 +65,12 @@ export interface GameEvents {
   /** il giocatore ha preso / lasciato Tony */
   'ragdoll:grab': { part: PartName };
   'ragdoll:release': { part: PartName; vx: number; vy: number };
-  /** mondo scelto nel Menu (1 = cantiere, 2 = dentro la galleria). Emesso da scenes/Menu.ts → il save lo memorizza */
-  'world:changed': { world: 1 | 2 };
+  /** mondo scelto nel Menu (1 = cantiere, 2 = galleria a 250 M, 3 = galleria a 500 M). Emesso da scenes/Menu.ts → il save lo memorizza */
+  'world:changed': { world: WorldId };
+  /** minigioco SPRITZ: avanzamento del cemento spruzzato (0..100). Emesso da scenes/Spritz.ts → il save lo memorizza */
+  'spritz:progress': { percent: number };
+  /** minigioco SPRITZ completato al 100%: premio già calcolato. Emesso da scenes/Spritz.ts */
+  'spritz:done': { reward: number };
   /** impostazioni cambiate (UI → sfx, save) */
   'settings:changed': { muted: boolean };
 }

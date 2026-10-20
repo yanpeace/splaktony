@@ -996,6 +996,8 @@ export const CRASH = {
 export const WORLDS = {
   /** livello giocatore che sblocca il mondo 2 */
   unlockLevel: 5,
+  /** metri di galleria scavati mostrati sul cartello per mondo (indice = mondo - 1); i mondi successivi seguiranno 1000, 2000, 4000 → boss finale */
+  meters: [0, 250, 500, 1000, 2000, 4000] as readonly number[],
   /** attesa (ms di gioco) prima che l'auto dell'intro parta dal basso */
   introDelayMs: 5000,
   /** zoom a scatti dentro la bocca della galleria (un livello ogni zoomStepMs) */

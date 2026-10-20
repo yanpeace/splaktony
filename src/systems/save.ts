@@ -1,5 +1,5 @@
 import { ECONOMY } from '../config/balance';
-import { events } from './events';
+import { events, type WorldId } from './events';
 
 /**
  * Salvataggio su localStorage con schema versionato.
@@ -14,7 +14,7 @@ import { events } from './events';
  */
 
 export const SAVE_KEY = 'splaktony.save';
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export interface SaveData {
   version: typeof SAVE_VERSION;
@@ -29,8 +29,10 @@ export interface SaveData {
   /** livello di potenziamento per arma: { punch: 0 } */
   weaponLevels: Record<string, number>;
   settings: { muted: boolean };
-  /** mondo scelto nel Menu (v2): 1 = cantiere, 2 = dentro la galleria */
-  world: 1 | 2;
+  /** mondo scelto nel Menu (v2; il 3 dalla v3): 1 = cantiere, 2-3 = dentro la galleria */
+  world: WorldId;
+  /** minigioco SPRITZ (v3): avanzamento corrente 0..100 e volte completato */
+  spritz: { percent: number; completed: number };
 }
 
 export function defaultSave(): SaveData {
@@ -46,6 +48,7 @@ export function defaultSave(): SaveData {
     weaponLevels: { punch: 0 },
     settings: { muted: false },
     world: 1,
+    spritz: { percent: 0, completed: 0 },
   };
 }
 
@@ -55,6 +58,8 @@ type AnySave = { version: number } & Record<string, unknown>;
 const MIGRATIONS: Record<number, (old: AnySave) => AnySave> = {
   // v2: mondo scelto nel Menu
   1: (d) => ({ ...d, version: 2, world: 1 }),
+  // v3: mondo 3 + minigioco spritz
+  2: (d) => ({ ...d, version: 3, spritz: { percent: 0, completed: 0 } }),
 };
 
 function migrate(raw: AnySave): SaveData {
@@ -84,8 +89,13 @@ function ensureStarterWeapon(s: SaveData): SaveData {
   }
   levels.punch ??= 0;
   const selectedWeapon = owned.includes(s.selectedWeapon) ? s.selectedWeapon : 'punch';
-  const world = s.world === 2 ? 2 : 1;
-  return { ...s, ownedWeapons: [...new Set(owned)], weaponLevels: levels, selectedWeapon, world };
+  const world: WorldId = s.world === 2 || s.world === 3 ? s.world : 1;
+  const sp = s.spritz && typeof s.spritz === 'object' ? s.spritz : { percent: 0, completed: 0 };
+  const spritz = {
+    percent: Number.isFinite(sp.percent) ? Math.min(100, Math.max(0, sp.percent)) : 0,
+    completed: Number.isFinite(sp.completed) ? Math.max(0, Math.floor(sp.completed)) : 0,
+  };
+  return { ...s, ownedWeapons: [...new Set(owned)], weaponLevels: levels, selectedWeapon, world, spritz };
 }
 
 export function load(): SaveData {
@@ -148,6 +158,8 @@ export function initSave(): SaveData {
   events.on('weapon:selected', (e) => patchSave({ selectedWeapon: e.weaponId }));
   events.on('level:up', (e) => patchSave({ level: e.level }));
   events.on('world:changed', (e) => patchSave({ world: e.world }));
+  events.on('spritz:progress', (e) => patchSave({ spritz: { ...getSave().spritz, percent: e.percent } }));
+  events.on('spritz:done', () => patchSave({ spritz: { percent: 0, completed: getSave().spritz.completed + 1 } }));
   events.on('settings:changed', (s) => patchSave({ settings: { ...getSave().settings, ...s } }));
   window.addEventListener('pagehide', flushSave);
   document.addEventListener('visibilitychange', () => {

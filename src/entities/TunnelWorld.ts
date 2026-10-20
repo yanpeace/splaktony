@@ -123,7 +123,7 @@ function playHum(start: boolean): void {
 }
 
 /** Disegna l'interno della galleria e avvia le animazioni; si ripulisce allo shutdown della scena. */
-export function buildTunnelWorld(scene: Phaser.Scene): void {
+export function buildTunnelWorld(scene: Phaser.Scene, _opts: { world: 2 | 3 } = { world: 2 }): void {
   const bd = registerTunnelSprites(scene);
   const add = (x: number, y: number, key: string, depth: number) =>
     scene.add.image(Math.round(x), Math.round(y), key).setOrigin(0).setDepth(depth);
