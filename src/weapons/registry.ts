@@ -17,6 +17,10 @@ import { Minigun } from './Minigun';
 import { Raggio } from './Raggio';
 import { Plasma } from './Plasma';
 import { Gravita } from './Gravita';
+import { Doppietta } from './Doppietta';
+import { Fucile } from './Fucile';
+import { Cecchino } from './Cecchino';
+import { Rpg } from './Rpg';
 import type { Weapon, WeaponContext } from './Weapon';
 
 /**
@@ -52,6 +56,10 @@ export const WEAPON_REGISTRY: WeaponEntry[] = [
   { id: 'raggio', create: (ctx) => new Raggio(ctx) },
   { id: 'plasma', create: (ctx) => new Plasma(ctx) },
   { id: 'gravita', create: (ctx) => new Gravita(ctx) },
+  { id: 'doppietta', create: (ctx) => new Doppietta(ctx) },
+  { id: 'fucile', create: (ctx) => new Fucile(ctx) },
+  { id: 'cecchino', create: (ctx) => new Cecchino(ctx) },
+  { id: 'rpg', create: (ctx) => new Rpg(ctx) },
 ];
 
 export function findWeapon(id: string): WeaponEntry | undefined {
