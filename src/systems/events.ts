@@ -36,6 +36,8 @@ export interface DamageEvent {
   weaponId: string;
   /** true se è un colpo "forte" (sopra FX.strongHitDamage) */
   strong: boolean;
+  /** true se è un colpo CRITICO (JUICE.critChance): amount è già moltiplicato per JUICE.critMultiplier */
+  crit?: boolean;
 }
 
 export interface GameEvents {

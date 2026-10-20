@@ -1,4 +1,4 @@
-import { DAMAGE, FX } from '../config/balance';
+import { DAMAGE, FX, JUICE } from '../config/balance';
 import { events, type PartName } from './events';
 
 /**
@@ -25,7 +25,9 @@ export function impactDamage(relativeSpeed: number): number {
 /** Applica moltiplicatori, arrotonda ed emette 'damage'. Ritorna il danno finale (0 = niente). */
 export function dealDamage(hit: HitInput): number {
   if (!(hit.amount > 0)) return 0;
-  const amount = Math.max(1, Math.round(hit.amount * DAMAGE.partMultiplier[hit.part]));
+  const crit = Math.random() < JUICE.critChance;
+  const raw = hit.amount * DAMAGE.partMultiplier[hit.part] * (crit ? JUICE.critMultiplier : 1);
+  const amount = Math.max(1, Math.round(raw));
   events.emit('damage', {
     amount,
     part: hit.part,
@@ -33,6 +35,7 @@ export function dealDamage(hit: HitInput): number {
     y: hit.y,
     weaponId: hit.weaponId,
     strong: amount >= FX.strongHitDamage,
+    crit,
   });
   return amount;
 }

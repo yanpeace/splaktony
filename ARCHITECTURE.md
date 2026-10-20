@@ -55,7 +55,9 @@ src/
     sprites.ts          sprite di Tony, stanza e UI + registerSprites()
     pixelFont.ts        font bitmap 5x7: pixelText, setPixelText, formatCompact
     effects.ts          spawnParticles, hitFlash, shake, hitStop/isFrozen,
-                        damageNumber, damageColor, popFrames
+                        damageNumber, hitNumber, damageColor, popFrames
+    juice.ts            scritte fumetto, impact frame, zoom, linee, cornice
+                        critici, squash, monete che volano (bindFlyingCoins)
     ui.ts               drawPanel (riquadro 1px), ArcadeButton (si abbassa di 1px)
   audio/
     sfx.ts              unlockAudio, setMuted, tone, noise, playHit, playPunch,
@@ -102,7 +104,7 @@ events.peek('coins:changed');                     // ultimo payload, senza iscri
 
 | Evento | Payload | Chi lo emette | Note |
 |---|---|---|---|
-| `damage` | `{ amount, part, x, y, weaponId, strong }` | solo `damage.dealDamage()` | `amount` è finale (testa x2, arrotondato, >= 1). `weaponId` = id arma o `'impact'` per urti contro la stanza. `strong` = sopra `FX.strongHitDamage` |
+| `damage` | `{ amount, part, x, y, weaponId, strong, crit? }` | solo `damage.dealDamage()` | `amount` è finale (testa x2, critico x2, arrotondato, >= 1). `weaponId` = id arma o `'impact'` per urti contro la stanza. `strong` = sopra `FX.strongHitDamage`. `crit` = colpo CRITICO (`JUICE.critChance`, già moltiplicato per `JUICE.critMultiplier`) |
 | `coins:changed` | `{ coins, delta }` | `economy` | `delta` < 0 = spesa |
 | `damage:total` | `{ total }` | `economy` | danno cumulativo |
 | `weapon:selected` | `{ weaponId, name, iconKey }` | `Game.selectWeapon` | il save lo memorizza |
@@ -219,6 +221,7 @@ riportate dentro, giunti stirati per troppo tempo → `respawn()`.
 | `shake(scene, px, ms)` | screen shake a pixel interi (solo camera di gioco) |
 | `hitStop(scene, ms)` / `isFrozen(scene)` | freeze di fisica e particelle (30-60 ms) |
 | `damageNumber(scene, x, y, testo, colore)` / `damageColor(n)` | numero pixel che salta e svanisce |
+| `hitNumber(scene, x, y, amount, { mergeKey, crit, depth })` | numero "ricco" usato da feedback: scala 2 sopra `JUICE.numberScale2At`, pop + rimbalzo a 3 frame, somma i colpi con la stessa `mergeKey` entro `JUICE.numberMergeMs`, "CRIT!" sopra i critici |
 | `popFrames(scene, x, y, [chiaviTexture], frameMs)` | animazione usa e getta a pochi frame |
 | `acquireImage(scene, x, y, chiave)` / `releaseImage(img)` | immagine dal pool condiviso (proiettili, bossoli, fori, fumo...) |
 
@@ -233,6 +236,25 @@ niente rotazione/tint/alpha), quindi reimposta ciò che ti serve.
 Il feedback standard dei colpi è già cablato in `systems/feedback.ts`
 (ascolta `damage`): un'arma nuova non deve rifarlo, solo aggiungere il suo
 effetto specifico (scintille, bossolo, esplosione...).
+
+**Juice** (`gfx/juice.ts`, numeri in `JUICE` in fondo a `balance.ts`), tutto
+automatico da `damage` tramite `juiceHit()` chiamato da feedback:
+
+| Effetto | Quando |
+|---|---|
+| squash & stretch della parte colpita (1.2x0.8 → 1, solo sprite) | ogni colpo |
+| scritta fumetto (scala 3→2, rotazione a scatti, "esplosione" a 3 frame, trema e lampeggia) + swoosh | `strong` o `crit`; max 1 ogni `wordMinGapMs`, max `maxWords` a schermo |
+| linee d'impatto radiali 1px, 2 frame | `strong` |
+| impact frame: Tony sagoma bianca, sfondo scuro (≤ 2 frame, max 1 al secondo) | `amount >= JUICE.veryStrongDamage` |
+| punch-zoom 1 → 1.04 → 1.02 → 1 (solo se la camera è a zoom 1) | `amount >= JUICE.veryStrongDamage` |
+| cornice 2px rossa/gialla (nella scena UI) + suono "ding" cattivo | `crit` |
+| monete che volano dal colpo al contatore + bump (`bindFlyingCoins`, agganciato da UI) | `coins:changed` con `delta > 0` |
+
+Le parole dipendono dalla famiglia dell'arma: `WEAPON_FAMILY` (id esatto →
+famiglia), poi `FAMILY_PATTERNS` (regex sul weaponId, per le armi nuove), poi
+`default` (POW!). Le parole di ogni famiglia sono in `WORD_FAMILIES`. Arma
+nuova con un nome "parlante" (es. `katana`, `lanciafiamme`) = niente da fare;
+altrimenti aggiungi una riga a `WEAPON_FAMILY`.
 
 `audio/sfx.ts`: tutte le `play*()` sono sicure anche ad audio bloccato e
 hanno un limitatore anti-raffica. Per nuovi suoni usa `tone()` e `noise()`.
