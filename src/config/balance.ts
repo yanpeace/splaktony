@@ -19,22 +19,14 @@ export const SCREEN_FIT = {
 } as const;
 
 /**
- * Margini di riserva per iPhone (px CSS) quando la pagina sta sotto la barra
- * di stato ma env(safe-area-inset-*) dice 0 (vedi config/screen.ts).
+ * Margine di riserva in basso (px CSS) per l'app da Home su iPhone quando
+ * env(safe-area-inset-bottom) dice 0 (vedi config/screen.ts). In alto la
+ * barra di stato è opaca (index.html): nessun margine.
  */
 export const SAFE_FALLBACK = {
-  /** 14 Pro / 15 / 16 / 17 (schermi da 852 px CSS in su): Dynamic Island */
-  islandMinH: 852,
-  island: 59,
-  /** X .. 14 (812..844 px): notch */
+  /** X e successivi (schermi da 812 px CSS in su): indicatore Home */
   notchMinH: 812,
-  notch: 47,
-  /** SE / 8 e precedenti: solo la barra di stato */
-  legacy: 20,
-  /** indicatore Home */
   bottom: 34,
-  /** Safari di iOS 26: la pagina va fino al bordo alto anche fuori dall'app da Home */
-  edgeToEdgeIos: 26,
 } as const;
 
 /** Rimisura dal vivo dello schermo (systems/screenWatch.ts). */

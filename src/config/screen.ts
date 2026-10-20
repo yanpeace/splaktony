@@ -34,22 +34,16 @@ export interface ScreenFit {
 }
 
 /**
- * Margini di riserva per iPhone (px CSS) quando la pagina sta sotto la barra
- * di stato (app da Home, Safari di iOS 26) ma env(safe-area-inset-*) dice 0.
+ * Margine di riserva in basso (px CSS) per l'app da Home su iPhone, quando
+ * la pagina sta sotto l'indicatore Home ma env(safe-area-inset-bottom) dice 0.
+ * In alto non serve: la barra di stato è opaca (index.html) e in Safari la
+ * pagina non ci va sotto (niente viewport-fit=cover), quindi niente sfocatura.
  */
 export interface SafeFallback {
-  /** altezza schermo (px CSS, verticale) da cui c'è la Dynamic Island */
-  islandMinH: number;
-  island: number;
-  /** altezza schermo da cui c'è il notch */
+  /** altezza schermo (px CSS, verticale) da cui c'è l'indicatore Home (notch / Dynamic Island) */
   notchMinH: number;
-  notch: number;
-  /** iPhone col tasto Home: solo la barra di stato */
-  legacy: number;
-  /** indicatore Home (solo iPhone con notch / Dynamic Island) */
+  /** indicatore Home */
   bottom: number;
-  /** prima versione di iOS / Safari in cui la pagina scorre sotto la barra di stato */
-  edgeToEdgeIos: number;
 }
 
 export interface ScreenSize {
@@ -101,25 +95,43 @@ function viewportBox(): { w: number; h: number; top: number } {
   return { w: window.innerWidth, h: window.innerHeight, top: 0 };
 }
 
+const nav = () => (typeof navigator === 'undefined' ? undefined : (navigator as Navigator & { standalone?: boolean }));
+const mm = (q: string) => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(q).matches;
+
+/** iPhone / iPad (anche iPad che si presenta come Mac) */
+export function isIos(): boolean {
+  const n = nav();
+  if (!n) return false;
+  return /iPhone|iPad|iPod/.test(n.userAgent) || (n.platform === 'MacIntel' && n.maxTouchPoints > 1);
+}
+
+/** pagina aperta come app (icona sulla Home / schermo intero), non dentro un browser */
+export function isStandaloneApp(): boolean {
+  const n = nav();
+  return n?.standalone === true || mm('(display-mode: standalone)') || mm('(display-mode: fullscreen)') || (typeof document !== 'undefined' && !!document.fullscreenElement);
+}
+
+/** iPhone / iPad dentro Safari (o un altro browser): la barra in basso è del browser, lo schermo intero vero si ha solo dall'app da Home */
+export function isIosBrowser(): boolean {
+  return isIos() && !isStandaloneApp();
+}
+
 /**
- * iPhone con la pagina sotto la barra di stato (app da Home / schermo intero,
- * oppure Safari di iOS 26+ che disegna fino al bordo alto): se env() dice 0
- * si usa un margine di riserva, altrimenti l'HUD finisce sotto ora e batteria.
+ * App da Home su iPhone: la pagina sta sotto l'indicatore Home; se env() dice 0
+ * (primi istanti) vale il margine di riserva, così i pulsanti non ci finiscono sotto.
  */
 function iosFallback(fb: SafeFallback, box: { w: number; h: number; top: number }): { top: number; bottom: number } {
   const none = { top: 0, bottom: 0 };
-  const nav = navigator as Navigator & { standalone?: boolean };
-  const ua = nav.userAgent;
-  if (!/iPhone|iPod/.test(ua) || box.h <= box.w || box.top > 0) return none;
-  const mm = (q: string) => typeof window.matchMedia === 'function' && window.matchMedia(q).matches;
-  const standalone = nav.standalone === true || mm('(display-mode: standalone)') || mm('(display-mode: fullscreen)') || !!document.fullscreenElement;
-  // iOS 26 congela "OS 18_6" nello user agent: conta la versione di Safari
-  const ver = Math.max(Number(/Version\/(\d+)/.exec(ua)?.[1] ?? 0), Number(/OS (\d+)_/.exec(ua)?.[1] ?? 0));
-  if (!standalone && ver < fb.edgeToEdgeIos) return none;
+  if (!isIos() || box.h <= box.w || !isStandaloneApp()) return none;
   const sh = Math.max(screen.width, screen.height);
-  const top = sh >= fb.islandMinH ? fb.island : sh >= fb.notchMinH ? fb.notch : fb.legacy;
-  const bottom = sh >= fb.notchMinH ? fb.bottom : 0;
-  return { top, bottom };
+  return { top: 0, bottom: sh >= fb.notchMinH ? fb.bottom : 0 };
+}
+
+/** Misure grezze per la riga di diagnostica nelle Impostazioni. */
+export function screenInfo(): { w: number; h: number; app: boolean; safeTop: number; safeBottom: number } {
+  const box = viewportBox();
+  const safe = readSafeArea();
+  return { w: Math.round(box.w), h: Math.round(box.h), app: isStandaloneApp(), safeTop: Math.round(safe.top), safeBottom: Math.round(safe.bottom) };
 }
 
 /** Misura lo schermo adesso (nessun effetto collaterale a parte la sonda). */

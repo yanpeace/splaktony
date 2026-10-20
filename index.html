@@ -3,10 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <script>
+      // Safari su iPhone/iPad (non app da Home): senza viewport-fit=cover la pagina
+      // resta SOTTO la barra di stato, che iOS 26 altrimenti sfoca sopra l'HUD.
+      // Nell'app da Home il cover serve per il margine dell'indicatore Home.
+      (function () {
+        var ua = navigator.userAgent;
+        var ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        var mm = function (q) { return !!(window.matchMedia && window.matchMedia(q).matches); };
+        var app = navigator.standalone === true || mm('(display-mode: standalone)') || mm('(display-mode: fullscreen)');
+        if (!ios || app) return;
+        var m = document.querySelector('meta[name="viewport"]');
+        if (m) m.content = m.content.replace(/,\s*viewport-fit=cover/, '');
+      })();
+    </script>
     <meta name="theme-color" content="#1a1c2c" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- barra di stato OPACA: la pagina parte sotto ora e batteria, niente sfocatura di iOS 26 sull'HUD -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="Splak Tony" />
     <meta name="application-name" content="Splak Tony" />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -28,8 +43,8 @@
         -webkit-touch-callout: none;
         -webkit-tap-highlight-color: transparent;
       }
-      /* il riquadro del gioco è FISSO su tutta la finestra visibile (anche sotto
-         barra di stato e indicatore home, con viewport-fit=cover): su iOS
+      /* il riquadro del gioco è FISSO su tutta la finestra visibile (nell'app da
+         Home anche sotto l'indicatore home, con viewport-fit=cover): su iOS
          height:100% di html/body resta all'altezza "piccola" (barre di Safari
          visibili) e lasciava una banda in basso. config/screen.ts misura
          proprio questo riquadro per l'altezza logica. */

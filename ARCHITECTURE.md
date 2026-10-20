@@ -39,9 +39,14 @@ npm run build
      ancorate ai bordi (in basso `SCREEN.height - ...`).
    - notch / indicatore home: `SCREEN.safeTop` / `SCREEN.safeBottom` (px
      logici da `env(safe-area-inset-*)`, riletto a ogni misura): l'HUD si
-     sposta, lo sfondo no. Su iPhone con la pagina sotto la barra di stato
-     (app da Home, Safari di iOS 26) se env() dice 0 valgono i margini di
-     riserva `SAFE_FALLBACK` (Dynamic Island / notch / tasto Home).
+     sposta, lo sfondo no. Una scena HUD che sposta la camera (ProgressHUD)
+     usa `restScroll(scene, -safeTop)`, non `setScroll`: il tick di effects
+     riporta la camera allo scroll "a riposo". In alto la pagina NON va mai
+     sotto la barra di stato (index.html: barra opaca nell'app da Home, niente
+     `viewport-fit=cover` dentro Safari su iPhone), così iOS 26 non la sfoca;
+     in basso, nell'app da Home, se env() dice 0 vale `SAFE_FALLBACK.bottom`.
+     Dentro Safari la barra in basso è del browser e non si toglie: il Menu lo
+     dice (`isIosBrowser()`), le Impostazioni mostrano misure e modalità.
    - **dal vivo** (`systems/screenWatch.ts`): resize, rotazione, visualViewport,
      schermo intero (debounce `SCREEN_WATCH`), più controlli dopo l'avvio e uno
      periodico. Se l'altezza intera o i margini cambiano: `refreshScreen()`

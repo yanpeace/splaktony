@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { COMBO, DAILY, PROGRESSION, SCREEN } from '../config/balance';
 import { C, col, type ColorIndex } from '../config/palette';
 import { playBuy, playLevelUp } from '../audio/sfx';
-import { spawnParticles } from '../gfx/effects';
+import { restScroll, spawnParticles } from '../gfx/effects';
 import { ensurePixelFont, pixelText, setPixelText } from '../gfx/pixelFont';
 import { ArcadeButton, drawPanel } from '../gfx/ui';
 import { Subscriptions } from '../systems/events';
@@ -53,7 +53,8 @@ export class ProgressHUD extends Phaser.Scene {
 
   create(): void {
     // tutta la HUD di progressione sta in alto: scende sotto il notch con la camera
-    this.cameras.main.setScroll(0, -SCREEN.safeTop);
+    // (restScroll, non setScroll: il tick di effects riporterebbe la camera a 0 e LV/OBJ finirebbero sopra la barra DANNO)
+    restScroll(this, -SCREEN.safeTop);
     this.lastXpFill = -1;
     this.lastLevel = -1;
     this.lastMult = 1;
