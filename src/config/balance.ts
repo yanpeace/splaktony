@@ -499,3 +499,40 @@ export const MENU = {
   /** vibrazione sui colpi forti (ms) */
   vibrateMs: 30,
 } as const;
+
+// ---- CANTIERE: animazioni ----
+
+/**
+ * Animazioni ambientali del cantiere (entities/SiteAmbient.ts): tutte a
+ * scatti, solo grafica dietro Tony. Coordinate in pixel logici, tempi in ms.
+ */
+export const SITE_AMBIENT = {
+  /** carrello della gru: tratto percorso lungo il braccio (x del centro) */
+  trolleyMinX: 40,
+  trolleyMaxX: 156,
+  /** il carrello avanza di 1px ogni trolleyStepMs, poi sosta */
+  trolleyStepMs: 140,
+  trolleyPauseMinMs: 2000,
+  trolleyPauseMaxMs: 5000,
+  /** dondolo del carico: gradi per scatto, scatti massimi, periodo */
+  swingStepDeg: 5,
+  swingMaxSteps: 3,
+  swingPeriodMs: 2600,
+  /** ampiezza (in scatti) a riposo, dopo una frenata e dopo un colpo forte */
+  swingAmpRest: 1,
+  swingAmpStop: 1.8,
+  swingAmpStrong: 3,
+  /** tempo per tornare all'ampiezza a riposo */
+  swingDecayMs: 1800,
+  /** lampeggianti: rosso della gru e coppia arancio/gialla su transenna e cono */
+  beaconMs: 600,
+  lampMs: 380,
+  /** bandierina */
+  flagMs: 280,
+  /** polvere dalla strada: sbuffi in pool, uno ogni dustMinMs..dustMaxMs */
+  dustPool: 4,
+  dustMinMs: 1400,
+  dustMaxMs: 3800,
+  dustStepMs: 120,
+  dustSteps: 9,
+} as const;
