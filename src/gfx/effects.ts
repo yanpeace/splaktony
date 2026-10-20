@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { FX } from '../config/balance';
+import { FX, JUICE } from '../config/balance';
 import { C, col, type ColorIndex } from '../config/palette';
 import { fontKey, ensurePixelFont, normalizeText } from './pixelFont';
 
@@ -32,6 +32,14 @@ interface FloatingNumber {
   y0: number;
   drift: number;
   start: number;
+  /** campi dei numeri "ricchi" (hitNumber): scala, pop, somma, etichetta */
+  scale: number;
+  popUntil: number;
+  bounce: boolean;
+  mergeKey: string | null;
+  total: number;
+  lastAt: number;
+  label: Phaser.GameObjects.BitmapText | null;
 }
 
 interface Pop {
@@ -292,6 +300,18 @@ export function damageColor(amount: number): ColorIndex {
 }
 
 const NUMBER_MS = 650;
+/** frazione della vita in cui il numero sale */
+const JUMP_K = 0.4;
+
+function releaseNumber(s: FxState, n: FloatingNumber): void {
+  n.obj.setVisible(false).setActive(false);
+  s.freeTexts.push(n.obj);
+  if (n.label) {
+    n.label.setVisible(false).setActive(false);
+    s.freeTexts.push(n.label);
+    n.label = null;
+  }
+}
 
 function tickNumbers(s: FxState, now: number): void {
   const list = s.numbers;
@@ -300,17 +320,76 @@ function tickNumbers(s: FxState, now: number): void {
     const n = list[i];
     const k = Math.min(1, (now - n.start) / NUMBER_MS);
     if (k >= 1) {
-      n.obj.setVisible(false).setActive(false);
-      s.freeTexts.push(n.obj);
+      releaseNumber(s, n);
       continue;
     }
     // salto parabolico rapido nel primo 40%, poi fermo e lampeggio
-    const jump = k < 0.4 ? Math.sin((k / 0.4) * Math.PI * 0.5) : 1;
-    n.obj.setPosition(Math.round(n.x0 + n.drift * jump), Math.round(n.y0 - 14 * jump));
-    n.obj.setVisible(k <= 0.65 || Math.floor(k * 20) % 2 === 0);
+    const jump = k < JUMP_K ? Math.sin((k / JUMP_K) * Math.PI * 0.5) : 1;
+    // rimbalzo a 3 frame dopo il salto (solo hitNumber): giù 2px, giù 1px, fermo
+    const bounce = !n.bounce || k < JUMP_K ? 0 : k < JUMP_K + 0.06 ? 2 : k < JUMP_K + 0.12 ? 1 : 0;
+    const x = Math.round(n.x0 + n.drift * jump);
+    const y = Math.round(n.y0 - 14 * jump) + bounce;
+    const sc = now < n.popUntil ? n.scale + 1 : n.scale;
+    if (n.obj.scaleX !== sc) n.obj.setScale(sc);
+    n.obj.setPosition(x, y);
+    const visible = k <= 0.65 || Math.floor(k * 20) % 2 === 0;
+    n.obj.setVisible(visible);
+    if (n.label) {
+      n.label.setPosition(x, y - Math.round(n.obj.height) - 1);
+      // "CRIT!" alterna rosso/giallo a scatti (font già creati da hitNumber)
+      const fk = fontKey(Math.floor(now / 80) % 2 === 0 ? C.red : C.yellow);
+      if (n.label.font !== fk) n.label.setFont(fk);
+      n.label.setVisible(visible);
+    }
     list[w++] = n;
   }
   list.length = w;
+}
+
+function takeText(scene: Phaser.Scene, s: FxState, color: ColorIndex | number, text: string, depth: number) {
+  const key = ensurePixelFont(scene, color);
+  let t = s.freeTexts.pop();
+  while (t && !t.scene) t = s.freeTexts.pop();
+  if (t) {
+    if (t.font !== fontKey(color)) t.setFont(key);
+    t.setText(normalizeText(text)).setScale(1).setOrigin(0.5, 1).setDepth(depth).setActive(true).setVisible(true);
+  } else {
+    t = scene.add.bitmapText(0, 0, key, normalizeText(text)).setLetterSpacing(-1).setOrigin(0.5, 1).setDepth(depth);
+  }
+  return t;
+}
+
+function pushNumber(
+  scene: Phaser.Scene,
+  s: FxState,
+  t: Phaser.GameObjects.BitmapText,
+  x: number,
+  y: number,
+  extra: Partial<FloatingNumber> = {},
+): FloatingNumber {
+  const dir = Math.random() < 0.5 ? -1 : 1;
+  const drift = dir * (2 + Math.random() * 6);
+  // resta sempre dentro lo schermo, anche a fine deriva
+  const half = Math.ceil(t.width / 2) + 9;
+  const x0 = Phaser.Math.Clamp(x, half, scene.scale.gameSize.width - half);
+  t.setPosition(Math.round(x0), Math.round(y));
+  const n: FloatingNumber = {
+    obj: t,
+    x0,
+    y0: y,
+    drift,
+    start: scene.time.now,
+    scale: 1,
+    popUntil: 0,
+    bounce: false,
+    mergeKey: null,
+    total: 0,
+    lastAt: scene.time.now,
+    label: null,
+    ...extra,
+  };
+  s.numbers.push(n);
+  return n;
 }
 
 /** Numero pixel che salta su, rimbalza e sparisce lampeggiando. */
@@ -326,23 +405,65 @@ export function damageNumber(
   // troppi numeri a schermo: ricicla il più vecchio
   if (s.numbers.length >= FX.maxDamageNumbers) {
     const old = s.numbers.shift();
-    if (old) s.freeTexts.push(old.obj);
+    if (old) releaseNumber(s, old);
   }
-  const key = ensurePixelFont(scene, color);
-  let t = s.freeTexts.pop();
-  if (t) {
-    if (t.font !== fontKey(color)) t.setFont(key);
-    t.setText(normalizeText(text)).setDepth(depth).setActive(true).setVisible(true);
-  } else {
-    t = scene.add.bitmapText(0, 0, key, normalizeText(text)).setLetterSpacing(-1).setOrigin(0.5, 1).setDepth(depth);
+  pushNumber(scene, s, takeText(scene, s, color, text, depth), x, y);
+}
+
+export interface HitNumberOpts {
+  /** colpi con la stessa chiave entro JUICE.numberMergeMs si sommano in un unico numero */
+  mergeKey?: string | null;
+  /** critico: numero grande arancio con "CRIT!" sopra, mai sommato */
+  crit?: boolean;
+  depth?: number;
+}
+
+/**
+ * Numero di danno "ricco": scala 2 sopra JUICE.numberScale2At, pop di 1 frame
+ * a scala +1, rimbalzo a 3 frame, colore per entità (damageColor) e somma dei
+ * colpi ravvicinati con la stessa mergeKey (es. la parte colpita).
+ */
+export function hitNumber(scene: Phaser.Scene, x: number, y: number, amount: number, opts: HitNumberOpts = {}): void {
+  const s = state(scene);
+  const now = scene.time.now;
+  const depth = opts.depth ?? 60;
+  const key = opts.crit ? null : opts.mergeKey ?? null;
+  if (key !== null) {
+    for (let i = s.numbers.length - 1; i >= 0; i--) {
+      const n = s.numbers[i];
+      if (n.mergeKey !== key || now - n.lastAt > JUICE.numberMergeMs) continue;
+      n.total += amount;
+      n.lastAt = now;
+      const color = damageColor(n.total);
+      const fk = ensurePixelFont(scene, color);
+      if (n.obj.font !== fk) n.obj.setFont(fk);
+      n.obj.setText(normalizeText(String(n.total)));
+      n.scale = n.total >= JUICE.numberScale2At ? 2 : 1;
+      n.popUntil = now + JUICE.numberPopMs;
+      // riparte dalla fase "fermo in alto": niente nuovo salto, vita allungata
+      n.start = now - NUMBER_MS * JUMP_K;
+      n.bounce = true;
+      return;
+    }
   }
-  const dir = Math.random() < 0.5 ? -1 : 1;
-  const drift = dir * (2 + Math.random() * 6);
-  // resta sempre dentro lo schermo, anche a fine deriva
-  const half = Math.ceil(t.width / 2) + 9;
-  const x0 = Phaser.Math.Clamp(x, half, scene.scale.gameSize.width - half);
-  t.setPosition(Math.round(x0), Math.round(y));
-  s.numbers.push({ obj: t, x0, y0: y, drift, start: scene.time.now });
+  if (s.numbers.length >= FX.maxDamageNumbers) {
+    const old = s.numbers.shift();
+    if (old) releaseNumber(s, old);
+  }
+  const color = opts.crit ? C.orange : damageColor(amount);
+  const scale = opts.crit || amount >= JUICE.numberScale2At ? 2 : 1;
+  const t = takeText(scene, s, color, String(amount), depth).setScale(scale);
+  const n = pushNumber(scene, s, t, x, y, {
+    scale,
+    popUntil: now + JUICE.numberPopMs,
+    bounce: true,
+    mergeKey: key,
+    total: amount,
+  });
+  if (opts.crit) {
+    ensurePixelFont(scene, C.yellow);
+    n.label = takeText(scene, s, C.red, 'CRIT!', depth);
+  }
 }
 
 // ---------------------------------------------------------------- pop a frame

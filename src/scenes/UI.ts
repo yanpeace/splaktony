@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { ROOM_INNER, SCREEN } from '../config/balance';
+import { JUICE, ROOM_INNER, SCREEN } from '../config/balance';
 import { C } from '../config/palette';
+import { bindFlyingCoins } from '../gfx/juice';
 import { formatCompact, pixelText, setPixelText } from '../gfx/pixelFont';
 import { ArcadeButton, drawPanel } from '../gfx/ui';
 import { events, Subscriptions } from '../systems/events';
@@ -28,7 +29,7 @@ export class UI extends Phaser.Scene {
 
     // --- monete
     drawPanel(g, 88, 3, 67, 13);
-    this.add.image(91, 6, 'ui-coin').setOrigin(0);
+    const coinIcon = this.add.image(91, 6, 'ui-coin').setOrigin(0);
     const coinText = pixelText(this, 152, 5, '0', C.yellow).setOrigin(1, 0);
 
     // --- audio on/off
@@ -93,20 +94,25 @@ export class UI extends Phaser.Scene {
     if (getSave().totalDamage > 0) hideHint();
 
     // --- eventi
+    // monete che volano dal punto del colpo al contatore (gfx/juice): a ogni arrivo
+    // "bump" di 2px del contatore e dell'icona, poi torna giù a scatti
     let bump: Phaser.Time.TimerEvent | null = null;
+    const bumpCoins = () => {
+      coinText.y = 3;
+      coinIcon.y = 4;
+      bump?.remove();
+      bump = this.time.delayedCall(JUICE.coinBumpMs, () => {
+        coinText.y = 4;
+        coinIcon.y = 5;
+        bump = this.time.delayedCall(JUICE.coinBumpMs, () => {
+          coinText.y = 5;
+          coinIcon.y = 6;
+        });
+      });
+    };
+    this.subs.add(bindFlyingCoins(this, { x: 94, y: 9, onArrive: bumpCoins }));
     this.subs
-      .on(
-        'coins:changed',
-        (e) => {
-          setPixelText(coinText, formatCompact(e.coins));
-          if (e.delta <= 0) return;
-          // "saltello" di 1px per 2 frame quando arrivano monete
-          coinText.y = 4;
-          bump?.remove();
-          bump = this.time.delayedCall(70, () => (coinText.y = 5));
-        },
-        true,
-      )
+      .on('coins:changed', (e) => setPixelText(coinText, formatCompact(e.coins)), true)
       .on('damage:total', (e) => setPixelText(dmgText, formatCompact(e.total)), true)
       .on(
         'weapon:selected',

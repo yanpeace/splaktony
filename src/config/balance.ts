@@ -793,3 +793,78 @@ export const WEATHER = {
   dripBurstMs: 20000,
   dripBurstEveryMs: [150, 450],
 } as const;
+
+// ---- JUICE ----
+/** "Dopamina" sui colpi (gfx/juice.ts, systems/feedback.ts, systems/damage.ts). I tetti dei pool stanno in FX. */
+export const JUICE = {
+  // ---- critici (applicati in systems/damage.dealDamage)
+  /** probabilità che un colpo sia CRITICO */
+  critChance: 0.08,
+  critMultiplier: 2,
+
+  // ---- scritte fumetto (SMACK! POW! ...) sui colpi forti / critici
+  wordMinGapMs: 250,
+  maxWords: 3,
+  wordMs: 640,
+  /** durata dei frame del pop (scala 3 → 2) */
+  wordPopFrameMs: 45,
+  /** frazione della vita da cui trema di 1px, e da cui lampeggia */
+  wordShakeFrom: 0.2,
+  wordBlinkFrom: 0.72,
+  /** rotazione massima del pop, quantizzata in passi da wordRotStep (rad) */
+  wordRotMax: 0.24,
+  wordRotStep: 0.08,
+  /** frame della "esplosione" dietro la scritta */
+  wordBurstFrameMs: 70,
+
+  // ---- colpi "molto forti": impact frame + punch-zoom
+  veryStrongDamage: 40,
+  /** frame (≤ 2) in cui Tony è una sagoma bianca su sfondo scuro; al massimo uno ogni impactCooldownMs */
+  impactFrames: 2,
+  impactCooldownMs: 1000,
+  impactOverlayAlpha: [0.9, 0.75],
+  zoomSteps: [1.04, 1.02, 1],
+  zoomStepMs: 40,
+
+  // ---- linee d'impatto radiali (colpi forti)
+  speedLineCount: 12,
+  speedLineInner: 8,
+  speedLineLen: [5, 11],
+  speedLineFrameMs: 40,
+  maxSpeedLines: 3,
+
+  // ---- cornice colorata sui critici (2px, a scatti)
+  borderPx: 2,
+  borderFrameMs: 45,
+  borderFrames: 4,
+
+  // ---- squash & stretch della parte colpita (solo grafica, la fisica non cambia)
+  squash: [
+    [1.2, 0.8],
+    [1.1, 0.9],
+  ],
+  squashFrameMs: 34,
+
+  // ---- numeri di danno
+  /** da qui il numero è a scala 2 */
+  numberScale2At: 30,
+  /** colpi sulla stessa parte entro questo tempo si sommano in un unico numero */
+  numberMergeMs: 320,
+  /** frame del "rimbalzo" (scala +1 al primo frame) */
+  numberPopMs: 50,
+
+  // ---- monete che volano verso l'HUD
+  maxCoinsPerGain: 5,
+  maxFlyingCoins: 24,
+  coinFlyMs: 520,
+  coinStaggerMs: 45,
+  /** le monete si muovono a scatti di questo passo */
+  coinStepMs: 33,
+  /** ultimo colpo più vecchio di così: le monete partono dal centro dello schermo */
+  coinOriginMaxAgeMs: 250,
+  coinBumpMs: 60,
+
+  // ---- audio
+  dingVol: 0.12,
+  swooshVol: 0.09,
+} as const;
