@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { SCREEN, SPRITZ } from '../config/balance';
 import { C, col, PALETTE_INT } from '../config/palette';
 import { noise, playCoin, playLevelUp, tone, unlockAudio } from '../audio/sfx';
-import { acquireImage, popFrames, releaseImage, shake, spawnParticles } from '../gfx/effects';
+import { acquireImage, anchorBottom, popFrames, releaseImage, shake, spawnParticles } from '../gfx/effects';
 import { measureText, pixelText, setPixelText } from '../gfx/pixelFont';
 import {
   buildWallLayout,
@@ -75,19 +75,25 @@ interface FloatText {
 }
 
 const W = SCREEN.width;
-/** altezza della vista della talpa (la parete e la canvas del cemento); l'HUD in basso segue invece this.scale.height */
-const H = SCREEN.height;
+/** layout di base 180x320: la camera è ancorata in basso, sugli schermi lunghi la vista continua sopra (y < 0) */
+const H = SCREEN.baseHeight;
+/** riga in alto della barra: bordo alto dello schermo + notch */
+const HUD_Y = SCREEN.top + SCREEN.safeTop;
+/** punto del dito → mondo (camera spostata) */
+const tmpPoint = new Phaser.Math.Vector2();
 const COAT_KEY = 'sz-coat';
 /** profondità degli oggetti della scena */
 const D = { view: 0, chunk: 1, coat: 2, flash: 3, drip: 4, drop: 6, lance: 20, reticle: 21, hud: 30, text: 40, banner: 50, party: 60, screenFlash: 90, wipe: 1000 } as const;
-/** impaginazione HUD (pixel interi); i riquadri in basso stanno a `bottom` px dal fondo dello schermo */
-const BAR = { x: 58, y: 13, w: 82, h: 8 } as const;
-const GAUGE = { x: 3, w: 57, h: 21, bottom: 24 } as const;
-const TIMER = { x: 62, w: 56, h: 21, bottom: 24 } as const;
-const PRIZE = { x: 120, w: 57, h: 21, bottom: 24 } as const;
-/** striscione dei traguardi / tempo scaduto e scritta della combo */
-const BANNER = { y: 50, h: 40 } as const;
-const COMBO_Y = 31;
+/** impaginazione HUD (pixel interi): barra ancorata in alto (HUD_Y), riquadri in basso sopra l'indicatore home */
+const BAR = { x: 58, y: HUD_Y + 13, w: 82, h: 8 } as const;
+/** riga alta dei riquadri in basso (manometro, timer, premio) */
+const HUD_BOTTOM_Y = H - 24 - SCREEN.safeBottom;
+const GAUGE = { x: 3, w: 57, h: 21 } as const;
+const TIMER = { x: 62, w: 56, h: 21 } as const;
+const PRIZE = { x: 120, w: 57, h: 21 } as const;
+/** striscione dei traguardi / tempo scaduto e scritta della combo (sotto la barra in alto) */
+const BANNER = { y: HUD_Y + 50, h: 40 } as const;
+const COMBO_Y = HUD_Y + 31;
 /** colori delle parole delle zone, a giro con la combo */
 const WORD_COLORS = [C.lime, C.yellow, C.orange, C.cyan, C.white] as const;
 /** colori di coriandoli e fuochi */
@@ -176,9 +182,8 @@ export class Spritz extends Phaser.Scene {
   private nextHissAt = 0;
   private finishedAt = 0;
   private reward = 0;
-  /** altezza reale dello schermo logico (può superare la vista da 320) */
-  private sh: number = H;
-  private hudY: number = H - GAUGE.bottom;
+  /** riga alta dei riquadri in basso */
+  private hudY: number = HUD_BOTTOM_Y;
   private timerWarned = false;
 
   /** timer */
@@ -243,8 +248,6 @@ export class Spritz extends Phaser.Scene {
     this.hint = [];
     this.targetX = this.aimX = 90;
     this.targetY = this.aimY = 110;
-    this.sh = Math.round(this.scale.height);
-    this.hudY = this.sh - GAUGE.bottom;
     this.timeLeft = SPRITZ.timerMs;
     this.timedOut = false;
     this.timerWarned = false;
@@ -261,7 +264,8 @@ export class Spritz extends Phaser.Scene {
     this.barGlowUntil = 0;
     this.barGlowing = false;
     this.splats = 0;
-    this.cameras.main.setZoom(1).setOrigin(0.5).setScroll(0, 0);
+    this.cameras.main.setZoom(1).setOrigin(0.5);
+    anchorBottom(this);
 
     this.scene.pause('Game');
     registerSpritzSprites(this);
@@ -275,7 +279,7 @@ export class Spritz extends Phaser.Scene {
     this.restore(sp.percent);
 
     // un fondo interattivo a schermo pieno: niente tocchi alle scene sotto
-    this.add.zone(0, 0, W, this.sh).setOrigin(0).setInteractive().setDepth(-1);
+    this.add.zone(0, SCREEN.top, W, SCREEN.height).setOrigin(0).setInteractive().setDepth(-1);
     this.input.on(Phaser.Input.Events.POINTER_DOWN, this.onDown, this);
     this.input.on(Phaser.Input.Events.POINTER_MOVE, this.onMove, this);
     this.input.on(Phaser.Input.Events.POINTER_UP, this.onUp, this);
@@ -303,7 +307,7 @@ export class Spritz extends Phaser.Scene {
 
   private buildView(): void {
     const v = this.viewObjs;
-    v.push(this.add.image(0, 0, 'sz-view').setOrigin(0).setDepth(D.view));
+    v.push(this.add.image(0, SCREEN.top, 'sz-view').setOrigin(0).setDepth(D.view));
     for (const c of this.layout.chunks) v.push(this.add.image(c.x, c.y, c.key).setDepth(D.chunk));
 
     // cemento: una canvas a schermo pieno, scritta a pixel e caricata al massimo una volta per frame
@@ -350,16 +354,16 @@ export class Spritz extends Phaser.Scene {
     h.push(g);
 
     // barra in alto: percentuale grande, barra di avanzamento, ESCI
-    drawPanel(g, 0, 0, W, 24, { shadow: C.black });
-    this.pctText = pixelText(this, 4, 3, '0%', C.white).setScale(2).setDepth(D.hud + 1);
-    h.push(this.pctText, pixelText(this, BAR.x, 3, 'RIVESTIMENTO', C.silver).setDepth(D.hud + 1));
+    drawPanel(g, 0, SCREEN.top, W, 24 + SCREEN.safeTop, { shadow: C.black });
+    this.pctText = pixelText(this, 4, HUD_Y + 3, '0%', C.white).setScale(2).setDepth(D.hud + 1);
+    h.push(this.pctText, pixelText(this, BAR.x, HUD_Y + 3, 'RIVESTIMENTO', C.silver).setDepth(D.hud + 1));
     this.barG = this.add.graphics().setDepth(D.hud + 1);
     h.push(this.barG);
 
     const exitLabel = pixelText(this, 0, 0, 'ESCI', C.white);
     exitLabel.setPosition(-Math.floor(exitLabel.width / 2), -4);
     const exitBtn = alignButtonHit(
-      new ArcadeButton(this, W - 3 - 31, 4, {
+      new ArcadeButton(this, W - 3 - 31, HUD_Y + 4, {
         w: 31,
         h: 15,
         fill: C.red,
@@ -420,8 +424,8 @@ export class Spritz extends Phaser.Scene {
 
     // tendine nere per ingresso/uscita (sempre sopra a tutto)
     const black = col(C.black);
-    this.wipeTop = this.add.rectangle(0, 0, W, 0, black).setOrigin(0).setDepth(D.wipe);
-    this.wipeBottom = this.add.rectangle(0, this.sh, W, 0, black).setOrigin(0, 1).setDepth(D.wipe);
+    this.wipeTop = this.add.rectangle(0, SCREEN.top, W, 0, black).setOrigin(0).setDepth(D.wipe);
+    this.wipeBottom = this.add.rectangle(0, H, W, 0, black).setOrigin(0, 1).setDepth(D.wipe);
   }
 
   /** Oggetti del juice creati una volta sola: pool di scritte, combo, striscione, lampo a schermo pieno. */
@@ -434,7 +438,7 @@ export class Spritz extends Phaser.Scene {
     this.bannerG = this.add.graphics().setDepth(D.banner).setVisible(false);
     this.bannerBig = pixelText(this, W / 2, BANNER.y + 15, '', C.white).setOrigin(0.5).setDepth(D.banner + 1).setVisible(false);
     this.bannerSub = pixelText(this, W / 2, BANNER.y + 31, '', C.white).setOrigin(0.5).setDepth(D.banner + 1).setVisible(false);
-    this.screenFlash = this.add.rectangle(0, 0, W, this.sh, col(C.white)).setOrigin(0).setDepth(D.screenFlash).setVisible(false);
+    this.screenFlash = this.add.rectangle(0, SCREEN.top, W, SCREEN.height, col(C.white)).setOrigin(0).setDepth(D.screenFlash).setVisible(false);
     this.fxObjs = [...this.floats.map((f) => f.t), this.comboText, this.bannerG, this.bannerBig, this.bannerSub, this.screenFlash];
   }
 
@@ -532,7 +536,7 @@ export class Spritz extends Phaser.Scene {
     const n = SPRITZ.wipeSteps;
     let k = 0;
     const set = (step: number) => {
-      const h = Math.ceil((this.sh / 2) * (step / n));
+      const h = Math.ceil((SCREEN.height / 2) * (step / n));
       this.wipeTop.height = h;
       this.wipeBottom.height = h;
     };
@@ -578,8 +582,9 @@ export class Spritz extends Phaser.Scene {
   }
 
   private setTarget(p: Phaser.Input.Pointer): void {
-    this.targetX = Phaser.Math.Clamp(Math.round(p.x), 2, W - 3);
-    this.targetY = Phaser.Math.Clamp(Math.round(p.y + SPRITZ.aimOffsetY), SPRITZ.wallTop, SPRITZ.deckY - 2);
+    const w = this.cameras.main.getWorldPoint(p.x, p.y, tmpPoint);
+    this.targetX = Phaser.Math.Clamp(Math.round(w.x), 2, W - 3);
+    this.targetY = Phaser.Math.Clamp(Math.round(w.y + SPRITZ.aimOffsetY), SPRITZ.wallTop, SPRITZ.deckY - 2);
   }
 
   // ---------------------------------------------------------------- ciclo
@@ -667,7 +672,7 @@ export class Spritz extends Phaser.Scene {
     const gx = baseX + Math.cos(ang) * 8 * SPRITZ.lanceScale;
     const gy = baseY + Math.sin(ang) * 8 * SPRITZ.lanceScale;
     const cx = gx + 34;
-    const cy = this.sh + 8;
+    const cy = H + 8;
     for (const [color, s] of [
       [C.black, 8],
       [C.charcoal, 6],
@@ -677,7 +682,7 @@ export class Spritz extends Phaser.Scene {
         const a = (1 - t) * (1 - t);
         const b = 2 * (1 - t) * t;
         const x = a * gx + b * cx + t * t * (W + 4);
-        const y = a * gy + b * cy + t * t * (this.sh - 6);
+        const y = a * gy + b * cy + t * t * (H - 6);
         g.fillRect(Math.round(x - s / 2), Math.round(y - s / 2), s, s);
       }
     }
@@ -1192,7 +1197,7 @@ export class Spritz extends Phaser.Scene {
       g.fillStyle(col(C.charcoal));
       for (let q = 1; q < 4; q++) g.fillRect(BAR.x + 1 + Math.round(((BAR.w - 2) * q) / 4), BAR.y + 1, 1, 2);
       // la percentuale sobbalza di 1px e diventa gialla
-      this.pctText.setY(glow ? 2 : 3).setTint(col(glow ? C.yellow : C.white));
+      this.pctText.setY(HUD_Y + (glow ? 2 : 3)).setTint(col(glow ? C.yellow : C.white));
     }
 
     // riquadro premio: sobbalzo quando arriva una monetina

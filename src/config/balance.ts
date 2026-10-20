@@ -1,13 +1,32 @@
 /**
  * TUTTI i numeri di gameplay e di "feel" stanno qui.
- * Unità: pixel logici (schermo 180x320), millisecondi, velocità in px/step
- * (la fisica avanza a step fissi di 1/60 s).
+ * Unità: pixel logici (layout di base 180x320, vedi SCREEN), millisecondi,
+ * velocità in px/step (la fisica avanza a step fissi di 1/60 s).
  */
+import { computeScreen } from './screen';
 
-export const SCREEN = {
+/**
+ * Risoluzione logica: larghezza 180, altezza dal rapporto dello schermo
+ * (320 su 9:16 e finestre più larghe, fino a maxHeight sui telefoni lunghi).
+ * Le righe in più stanno SOPRA il layout di base: vedi config/screen.ts.
+ */
+export const SCREEN_FIT = {
   width: 180,
-  height: 320,
+  baseHeight: 320,
+  maxHeight: 420,
+  /** margine sicuro massimo (notch / indicatore home), px logici */
+  maxSafe: 16,
 } as const;
+
+/** { width, height, baseHeight, extra, top, safeTop, safeBottom }, calcolato una volta all'avvio. */
+export const SCREEN = computeScreen(SCREEN_FIT);
+
+/**
+ * Di quanto sale il bordo alto della stanza (soffitto, tubo sotto l'HUD)
+ * rispetto al layout di base: <= 0. Le righe in più diventano stanza, meno
+ * il margine del notch che spinge giù l'HUD.
+ */
+export const TOP_SHIFT = SCREEN.top + SCREEN.safeTop;
 
 /** Stanza chiusa: spessori visibili di muri, soffitto e pavimento. */
 export const ROOM = {
@@ -24,8 +43,8 @@ export const ROOM = {
 export const ROOM_INNER = {
   left: ROOM.wall,
   right: SCREEN.width - ROOM.wall,
-  top: ROOM.ceiling,
-  bottom: SCREEN.height - ROOM.floor,
+  top: ROOM.ceiling + TOP_SHIFT,
+  bottom: SCREEN.baseHeight - ROOM.floor,
 } as const;
 
 export const PHYSICS = {

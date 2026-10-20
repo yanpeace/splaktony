@@ -11,7 +11,7 @@ import { buildTunnelWorld, TUNNEL_WORLD_FOCUS } from '../entities/TunnelWorld';
 import { bindTunnelDeep } from '../entities/TunnelDeep';
 import { setTunnelWorld, tunnelBackdrop, worldMeters } from '../gfx/tunnelSprites';
 import { pixelText } from '../gfx/pixelFont';
-import { isFrozen } from '../gfx/effects';
+import { anchorBottom, isFrozen } from '../gfx/effects';
 import { dealDamage } from '../systems/damage';
 import { events, Subscriptions, type WorldId } from '../systems/events';
 import { bindHitFeedback } from '../systems/feedback';
@@ -37,8 +37,11 @@ export interface GameData {
   introTo?: WorldId;
 }
 
+/** Punto del mondo → frazione dello schermo (la camera è ancorata in basso: y 0 = riga SCREEN.extra). */
+const screenFrac = (x: number, y: number) => ({ x: x / SCREEN.width, y: (y - SCREEN.top) / SCREEN.height });
+
 /** Punto (frazione dello schermo) attorno a cui zooma la camera: la bocca della galleria. */
-const ZOOM_FOCUS = { x: TUNNEL.x / SCREEN.width, y: (TUNNEL.y - TUNNEL.h / 2) / SCREEN.height } as const;
+const ZOOM_FOCUS = screenFrac(TUNNEL.x, TUNNEL.y - TUNNEL.h / 2);
 
 /** I puntatori touch extra si aggiungono una volta sola (l'InputManager è globale). */
 let pointersAdded = false;
@@ -88,7 +91,8 @@ export class Game extends Phaser.Scene {
     }
     const cam = this.cameras.main;
     cam.resetFX();
-    cam.setZoom(1).setOrigin(0.5).setScroll(0, 0);
+    cam.setZoom(1).setOrigin(0.5);
+    anchorBottom(this); // schermi lunghi: righe in più sopra, il pavimento resta sul bordo basso
 
     const intro = this.worldId === 1 && !!data.intro;
     const introTo: WorldId = data.introTo === 3 ? 3 : 2;
@@ -174,7 +178,8 @@ export class Game extends Phaser.Scene {
     const cam = this.cameras.main;
     const black = PALETTE_INT[C.black];
     // si "esce" dalla talpa in fondo alla galleria
-    cam.setOrigin(TUNNEL_WORLD_FOCUS.x / SCREEN.width, TUNNEL_WORLD_FOCUS.y / SCREEN.height).setZoom(WORLDS.zoomOut[0]);
+    const focus = screenFrac(TUNNEL_WORLD_FOCUS.x, TUNNEL_WORLD_FOCUS.y);
+    cam.setOrigin(focus.x, focus.y).setZoom(WORLDS.zoomOut[0]);
     cam.fadeIn(WORLDS.fadeInMs, (black >> 16) & 0xff, (black >> 8) & 0xff, black & 0xff);
     this.stepZoom(WORLDS.zoomOut.slice(1), () => {
       cam.setZoom(1).setOrigin(0.5);

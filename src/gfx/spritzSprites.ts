@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SPRITZ } from '../config/balance';
+import { SCREEN, SPRITZ } from '../config/balance';
 import { makeSprites, type SpriteData } from './pixelSprite';
 import { makeIndexTexture, type IndexImage } from './tunnelSprites';
 
@@ -211,17 +211,25 @@ function deckPixel(x: number, y: number): number {
   return bayer(x, y) < 0.15 * (1 - dark) ? 0xf : 0x0;
 }
 
-/** Sfondo intero 180x320 (una volta sola, poi in cache come texture). */
+/**
+ * Sfondo intero 180x320 (una volta sola, poi in cache come texture). Sugli
+ * schermi lunghi parte da SCREEN.top (< 0): la volta continua sopra, sempre
+ * più al buio (lì non si spruzza: la parete utile parte da SPRITZ.wallTop).
+ */
 function buildView(): IndexImage {
-  const data = new Uint8Array(W * H).fill(T);
-  for (let y = 0; y < H; y++) {
+  const y0 = SCREEN.top;
+  const h = H - y0;
+  const data = new Uint8Array(W * h).fill(T);
+  for (let y = y0; y < H; y++) {
+    // buio a retino sopra la parete spruzzabile (quasi pieno a 70 px dal suo bordo)
+    const dark = clamp((SPRITZ.wallTop - 6 - y) / 70, 0, 0.85);
     for (let x = 0; x < W; x++) {
       const k = viewKind(x, y);
-      data[y * W + x] =
-        k === 'wall' ? wallPixel(x, y) : k === 'far' ? farPixel(x, y) : k === 'floor' ? floorPixel(x, y) : deckPixel(x, y);
+      const c = k === 'wall' ? wallPixel(x, y) : k === 'far' ? farPixel(x, y) : k === 'floor' ? floorPixel(x, y) : deckPixel(x, y);
+      data[(y - y0) * W + x] = dark > 0 && bayer(x, y) < dark ? 0x0 : c;
     }
   }
-  return { x: 0, y: 0, w: W, h: H, data };
+  return { x: 0, y: y0, w: W, h, data };
 }
 
 // ---------------------------------------------------------------- copertura del cemento

@@ -109,7 +109,8 @@ interface Toggle {
   set(on: boolean): void;
 }
 
-const PANEL = { x: 18, y: 64, w: 144, h: 168 } as const;
+/** riquadro centrato in verticale anche sugli schermi lunghi */
+const PANEL = { x: 18, y: 64 + Math.round(SCREEN.extra / 2), w: 144, h: 168 } as const;
 
 export class Settings extends Phaser.Scene {
   private subs = new Subscriptions();

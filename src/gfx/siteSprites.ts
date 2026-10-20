@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { SCREEN } from '../config/balance';
 import { makeSprites, spriteSize, type SpriteData } from './pixelSprite';
 import { roadAtY, scaleAtY, TUNNEL } from '../entities/siteLayout';
 
@@ -173,6 +174,23 @@ function sky(): SpriteData {
         }
       }
       g.set(x, y, c);
+    }
+  }
+  return g.rows();
+}
+
+/**
+ * Cielo sopra lo 0 (solo schermi lunghi, h = SCREEN.extra righe): blu come
+ * la prima banda di sky(), in alto sfuma a retino nel blu notte sotto l'HUD.
+ */
+function skyTop(h: number): SpriteData {
+  const g = new Grid(8, Math.max(1, h));
+  const edge = Math.round(g.h * 0.45); // fine del blu notte
+  const ramp = 12;
+  for (let y = 0; y < g.h; y++) {
+    for (let x = 0; x < g.w; x++) {
+      const t = (y - (edge - ramp / 2)) / ramp;
+      g.set(x, y, t >= 1 ? '9' : t > bayer(x, y) ? '9' : '8');
     }
   }
   return g.rows();
@@ -882,6 +900,7 @@ function pipe(): SpriteData {
 
 export const SITE_SPRITES: Record<string, SpriteData> = {
   'site-sky': sky(),
+  'site-sky-top': skyTop(SCREEN.extra),
   'site-cloud-a': cloud(26, 10, [
     [7, 6, 4.5],
     [14, 4.5, 5],

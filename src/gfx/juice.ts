@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { JUICE, SCREEN } from '../config/balance';
+import { JUICE, SCREEN, TOP_SHIFT } from '../config/balance';
 import { C, col, hex, type ColorIndex } from '../config/palette';
 import { noise, tone } from '../audio/sfx';
 import type { Ragdoll } from '../entities/Ragdoll';
@@ -328,7 +328,7 @@ function comicWord(scene: Phaser.Scene, s: JuiceState, e: DamageEvent, now: numb
   const halfW = Math.ceil(BURST_SIZES[size][0] / 2);
   const halfH = Math.ceil(BURST_SIZES[size][1] / 2);
   word.x = Math.round(Phaser.Math.Clamp(e.x, halfW + 1, SCREEN.width - halfW - 1));
-  word.y = Math.round(Phaser.Math.Clamp(e.y - 50, 20 + halfH, SCREEN.height - 40 - halfH));
+  word.y = Math.round(Phaser.Math.Clamp(e.y - 50, 20 + TOP_SHIFT + halfH, SCREEN.baseHeight - 40 - halfH));
   const steps = Math.round(JUICE.wordRotMax / JUICE.wordRotStep);
   const k = Phaser.Math.Between(1, steps) * (Math.random() < 0.5 ? -1 : 1);
   word.rot = k * JUICE.wordRotStep;

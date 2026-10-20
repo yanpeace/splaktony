@@ -34,16 +34,16 @@
         image-rendering: crisp-edges;
         touch-action: none;
       }
-      /* scanline CRT leggero: stessa area del canvas (Scale.FIT 180x320 = 9:16,
-         centrato), una riga scura ogni pixel logico. Non intercetta i tocchi. */
+      /* scanline CRT leggero: una riga scura ogni pixel logico. Posizione,
+         misura e passo delle righe li copia main.ts dal canvas (l'altezza
+         logica dipende dallo schermo). Non intercetta i tocchi. */
       #crt {
         display: none;
         position: fixed;
-        left: 50%;
-        top: 50%;
-        width: min(100vw, calc(100vh * 9 / 16));
-        height: min(100vh, calc(100vw * 16 / 9));
-        transform: translate(-50%, -50%);
+        left: 0;
+        top: 0;
+        width: 100vw;
+        height: 100vh;
         pointer-events: none;
         z-index: 2;
         background-image: repeating-linear-gradient(
@@ -53,7 +53,7 @@
           rgba(26, 28, 44, 0.22) 50%,
           rgba(26, 28, 44, 0.22) 100%
         );
-        background-size: 100% calc(100% / 320);
+        background-size: 100% 2px;
       }
       body.crt #crt { display: block; }
     </style>

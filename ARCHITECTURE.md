@@ -19,8 +19,27 @@ npm run build
 
 ## 1. Regole vincolanti
 
-1. **Risoluzione logica 180x320** (verticale), `pixelArt`, `roundPixels`,
-   `Scale.FIT`. Posizioni a schermo sempre intere (`Math.round`).
+1. **Risoluzione logica 180 x `SCREEN.height`** (verticale), `pixelArt`,
+   `roundPixels`, `Scale.FIT`. Posizioni a schermo sempre intere (`Math.round`).
+   L'altezza si calcola all'avvio dal rapporto della finestra
+   (`config/screen.ts`, limiti in `SCREEN_FIT`): 320 su 9:16 e finestre più
+   larghe, fino a 420 sui telefoni lunghi (390 su 9:19.5), così il canvas
+   riempie lo schermo senza bande. Il **layout di base resta 180x320** e le
+   righe in più (`SCREEN.extra`) stanno SOPRA:
+   - scene di mondo (Game, Menu, Spritz): `anchorBottom(scene)` (gfx/effects)
+     sposta la camera di `SCREEN.top` (= -extra; lo shake ci torna sopra).
+     Coordinate 0..320 invariate, bordo basso = y 320, sopra lo 0 si allungano
+     cielo (`site-sky-top`), volta della galleria (`TW.top`) e stanza
+     (`ROOM_INNER.top = ROOM.ceiling + TOP_SHIFT`). Per un punto "sotto l'HUD"
+     aggiungi `TOP_SHIFT`; per il bordo alto usa `SCREEN.top`; le frazioni di
+     schermo (origine dello zoom) sono `(y - SCREEN.top) / SCREEN.height`.
+     Input: `pointer.worldX/worldY` (o `camera.getWorldPoint`), mai `pointer.y`.
+   - scene HUD (UI, ProgressHUD, Shop, Settings): coordinate 0..`SCREEN.height`,
+     ancorate ai bordi (in basso `SCREEN.height - ...`).
+   - notch / indicatore home: `SCREEN.safeTop` / `SCREEN.safeBottom` (px
+     logici da `env(safe-area-inset-*)`): l'HUD si sposta, lo sfondo no.
+   - cambio di forma della finestra: FIT riadatta, l'altezza si ricalcola alla
+     prossima apertura. L'overlay `#crt` lo allinea `main.ts` al canvas.
 2. **Solo la palette Sweetie 16 + 1 rosa pelle** (`src/config/palette.ts`).
    Nel codice usa `C.<nome>` + `col()` (intero) o `hex()` (CSS). Mai colori
    letterali. L'indice 16 (`g`, `C.pink`) è riservato alla pelle di Tony.
@@ -47,6 +66,7 @@ npm run build
 src/
   main.ts               config Phaser (WebGL, matter, autoUpdate: false)
   config/
+    screen.ts           altezza logica dal rapporto dello schermo + safe area
     balance.ts          TUTTI i numeri (SCREEN, ROOM, PHYSICS, RAGDOLL, GRAB,
                         DAMAGE, ECONOMY, MOOD, FX, WEAPON_STATS)
     palette.ts          Sweetie 16 + rosa pelle: PALETTE_HEX, C, col(), hex()

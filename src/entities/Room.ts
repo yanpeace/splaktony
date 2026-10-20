@@ -20,7 +20,8 @@ import { roadAtY, TREE } from './siteLayout';
  * strada di sabbia a curve che scende dalla galleria al bordo basso,
  * sterrato con oggetti in scala (grandi davanti, piccoli vicino alla
  * galleria), terreno di gioco in ghiaia (y 292..320) e tubi d'impalcatura
- * come bordi. Fisica invariata: 4 corpi statici molto spessi allineati a
+ * come bordi. Schermi lunghi: sopra lo 0 il cielo continua ('site-sky-top')
+ * e la stanza sale fino a ROOM_INNER.top (vedi TOP_SHIFT). Fisica invariata: 4 corpi statici molto spessi allineati a
  * ROOM_INNER, etichette 'room:floor', 'room:ceiling', 'room:wall'.
  *
  * Depth: cielo 0, nuvole 0.1, montagna 0.3, piana (terreno + strada) 0.6,
@@ -105,6 +106,8 @@ export function drawSiteBackdrop(scene: Phaser.Scene, opts: SiteBackdropOptions 
 
   // ---- cielo e montagna (depth 0..0.3): l'HUD sta sopra il cielo scuro
   tile(0, 0, W, 156, 'site-sky', 0);
+  // schermi lunghi: il cielo continua sopra lo 0, più scuro verso l'alto
+  if (SCREEN.extra > 0) tile(0, SCREEN.top, W, SCREEN.extra, 'site-sky-top', 0);
   img(132, 60, 'site-cloud-a', 0.1);
   img(36, 68, 'site-cloud-b', 0.1);
   img(0, MOUNTAIN_Y0, 'site-mountain', 0.3);
@@ -146,15 +149,18 @@ export function buildRoom(scene: Phaser.Scene): MatterJS.BodyType[] {
  * interne allineate a ROOM_INNER. Uguale in tutti i mondi (la grafica cambia).
  */
 export function buildRoomBodies(scene: Phaser.Scene): MatterJS.BodyType[] {
-  const { width: W, height: H } = SCREEN;
+  const W = SCREEN.width;
   const { left, right, top, bottom } = ROOM_INNER;
   const T = ROOM.solidThickness;
+  // muri alti quanto tutta la stanza (anche le righe in più sopra lo 0 sugli schermi lunghi)
+  const H = bottom - top;
+  const cy = (top + bottom) / 2;
   const opts = { isStatic: true, friction: ROOM.friction, restitution: ROOM.restitution };
   const m = scene.matter.add;
   return [
     m.rectangle(W / 2, bottom + T / 2, W + T * 2, T, { ...opts, label: 'room:floor' }),
     m.rectangle(W / 2, top - T / 2, W + T * 2, T, { ...opts, label: 'room:ceiling' }),
-    m.rectangle(left - T / 2, H / 2, T, H + T * 2, { ...opts, label: 'room:wall' }),
-    m.rectangle(right + T / 2, H / 2, T, H + T * 2, { ...opts, label: 'room:wall' }),
+    m.rectangle(left - T / 2, cy, T, H + T * 2, { ...opts, label: 'room:wall' }),
+    m.rectangle(right + T / 2, cy, T, H + T * 2, { ...opts, label: 'room:wall' }),
   ];
 }

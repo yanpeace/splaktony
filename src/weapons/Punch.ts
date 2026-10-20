@@ -378,7 +378,8 @@ function edgeDistance(x: number, y: number, bx: number, by: number): number {
   let t = 1e9;
   if (bx < 0) t = Math.min(t, -x / bx);
   else if (bx > 0) t = Math.min(t, (SCREEN.width - x) / bx);
-  if (by < 0) t = Math.min(t, -y / by);
-  else if (by > 0) t = Math.min(t, (SCREEN.height - y) / by);
+  // camera ancorata in basso: lo schermo va da SCREEN.top a baseHeight
+  if (by < 0) t = Math.min(t, (SCREEN.top - y) / by);
+  else if (by > 0) t = Math.min(t, (SCREEN.baseHeight - y) / by);
   return Math.min(t, 400);
 }
