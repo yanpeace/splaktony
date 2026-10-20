@@ -58,6 +58,23 @@ export const RAGDOLL = {
   stretchResetMs: 600,
   /** passi di rotazione visiva (rotazione "a scatti" pixel-art) */
   rotationSteps: 24,
+  /**
+   * Limiti morbidi dell'angolo di ogni parte rispetto alla parte a cui è
+   * attaccata (gradi, ±). Senza limiti la testa si girava a 180° sul busto.
+   */
+  jointLimitDeg: {
+    head: 45,
+    armUpperL: 170,
+    armUpperR: 170,
+    armLowerL: 150,
+    armLowerR: 150,
+    legUpperL: 110,
+    legUpperR: 110,
+    legLowerL: 130,
+    legLowerR: 130,
+  },
+  /** quanta parte dello sforamento si corregge per step (0..1) */
+  jointLimitStiffness: 0.25,
 } as const;
 
 export const GRAB = {

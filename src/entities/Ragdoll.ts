@@ -163,6 +163,7 @@ export class Ragdoll {
     }
 
     scene.matter.world.on('collisionstart', this.onCollision, this);
+    scene.matter.world.on('beforeupdate', this.enforceJointLimits, this);
     this.subs.on('damage', (e) => {
       const p = this.parts.get(e.part);
       if (p) hitFlash(p.sprite);
@@ -344,6 +345,7 @@ export class Ragdoll {
     const world = this.scene.matter?.world as Phaser.Physics.Matter.World | null | undefined;
     if (world?.engine) {
       world.off('collisionstart', this.onCollision, this);
+      world.off('beforeupdate', this.enforceJointLimits, this);
       for (const id of [...this.grabs.keys()]) this.release(id, 0, 0, false);
       for (const j of this.joints) world.removeConstraint(j.c);
       for (const p of this.parts.values()) world.remove(p.body);
@@ -402,6 +404,29 @@ export class Ragdoll {
         amount,
         weaponId: meta.weaponId ?? 'impact',
       });
+    }
+  }
+
+  /**
+   * Limiti morbidi degli angoli dei giunti (ogni step di fisica): se una parte
+   * ruota oltre RAGDOLL.jointLimitDeg rispetto al genitore, le due parti
+   * ricevono una spinta angolare opposta che la riporta dentro il limite.
+   */
+  private enforceJointLimits(): void {
+    const mb = this.scene.matter.body;
+    const k = RAGDOLL.jointLimitStiffness;
+    for (const { def } of this.joints) {
+      const limitDeg = RAGDOLL.jointLimitDeg[def.b as keyof typeof RAGDOLL.jointLimitDeg];
+      if (limitDeg === undefined) continue;
+      const a = this.part(def.a).body;
+      const b = this.part(def.b).body;
+      const rel = Phaser.Math.Angle.Wrap(b.angle - a.angle);
+      const limit = Phaser.Math.DegToRad(limitDeg);
+      const excess = rel > limit ? rel - limit : rel < -limit ? rel + limit : 0;
+      if (excess === 0) continue;
+      // la parte figlia (più leggera) si corregge di più del genitore
+      mb.setAngularVelocity(b, b.angularVelocity - excess * k);
+      mb.setAngularVelocity(a, a.angularVelocity + excess * k * 0.3);
     }
   }
 
