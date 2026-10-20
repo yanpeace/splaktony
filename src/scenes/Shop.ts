@@ -18,7 +18,7 @@ type Content = Phaser.GameObjects.Container;
 
 // ------------------------------------------------------------ dati delle armi
 
-interface WeaponMeta {
+export interface WeaponMeta {
   id: string;
   name: string;
   /** texture dell'icona, o null se l'arma non si è lasciata istanziare */
@@ -49,7 +49,8 @@ function metaContext(scene: Phaser.Scene): WeaponContext {
   return { scene: fakeScene, ragdoll: inert as Ragdoll, dealDamage: () => 0 };
 }
 
-function weaponMeta(scene: Phaser.Scene, entry: WeaponEntry): WeaponMeta {
+/** Nome e icona di un'arma (in cache): li usano il negozio e la griglia armi dell'HUD. */
+export function weaponMeta(scene: Phaser.Scene, entry: WeaponEntry): WeaponMeta {
   const cached = metaCache.get(entry.id);
   if (cached) return cached;
   let meta: WeaponMeta = { id: entry.id, name: entry.id.toUpperCase(), iconKey: null, iconW: 0, iconH: 0 };

@@ -118,7 +118,8 @@ src/
   scenes/
     Boot.ts             genera texture/font, init save + economy, avvia Game
     Game.ts             stanza, Tony, fisica a passo fisso, input → arma
-    UI.ts               HUD sovrapposto (scena separata, non trema)
+    UI.ts               HUD sovrapposto (scena separata, non trema): riga in alto +
+                        menu rapido (pulsantino con l'icona dell'arma, sotto "LV")
     Shop.ts             negozio armi + potenziamenti (sopra UI)
 ```
 
@@ -146,7 +147,7 @@ events.peek('coins:changed');                     // ultimo payload, senza iscri
 | `coins:changed` | `{ coins, delta }` | `economy` | `delta` < 0 = spesa |
 | `damage:total` | `{ total }` | `economy` | danno cumulativo |
 | `weapon:selected` | `{ weaponId, name, iconKey }` | `Game.selectWeapon` | il save lo memorizza |
-| `weapon:request` | `{ weaponId }` | negozio / barra armi | `Game` seleziona l'arma |
+| `weapon:request` | `{ weaponId }` | negozio / griglia armi dell'HUD | `Game` seleziona l'arma |
 | `weapon:bought` | `{ weaponId, price }` | `economy.buyWeapon` | arma aggiunta a `ownedWeapons` |
 | `weapon:upgraded` | `{ weaponId, level, cost }` | `economy.upgradeWeapon` | `Game` aggiorna `weapon.level` |
 | `level:up` | `{ level }` | sistema livelli (da fare) | il save salva `level` |
@@ -355,7 +356,7 @@ segnaposto `s`/`h`/`l` convertiti da `skin()` (costanti `SKIN_*` in
 
 ### Negozio e potenziamenti
 
-- `scenes/Shop.ts`: scena sovrapposta (pulsante NEGOZIO dell'HUD), lista da
+- `scenes/Shop.ts`: scena sovrapposta (NEGOZIO nel menu rapido dell'HUD), lista da
   `WEAPON_REGISTRY` a pagine da 6. Per nome/icona istanzia ogni arma con un
   `WeaponContext` inerte (solo `scene.textures` è reale): **i costruttori delle
   armi non devono fare lavoro importante**, mettilo in `activate()`.
@@ -406,13 +407,39 @@ segnaposto `s`/`h`/`l` convertiti da `skin()` (costanti `SKIN_*` in
   sullo sfondo, gocce dalla volta con cerchi nelle pozzanghere, ventilatore,
   lampada appesa che dondola ai colpi forti, cartello PERICOLO con lucine,
   mini escavatore, radio con le note, topo sul cordolo, polvere e sassolini.
-- Pulsante MENU nell'HUD (in basso al centro): ferma Shop/Settings/
+- Pulsante MENU nel menu rapido dell'HUD: ferma Shop/Settings/
   ProgressHUD/Game e torna al Menu.
+
+## 9a. HUD e menu rapido (`scenes/UI.ts`, `HUD_MENU` in balance.ts)
+
+- Il **fondo dello schermo è libero per Tony**: niente pulsanti fissi in
+  basso (prima arma / MENU / NEGOZIO / SPRITZ stavano sul pavimento e si
+  mangiavano i tocchi quando Tony ci cadeva sopra).
+- In alto: DANNO, monete, audio (fissi). Sotto "LV" (ProgressHUD), a
+  sinistra (`HUD_MENU.toggle`, sotto `safeTop`), un pulsantino con l'icona
+  dell'arma attiva e una freccina gialla (giù = chiuso, su = aperto). Nei
+  mondi 2/3, finché SPRITZ non è mai stato provato, il pulsantino lampeggia.
+- Tocco → **pannello** che entra da sinistra a scatti (`slideSteps`): riga
+  dell'arma (icona + nome + ">", apre la griglia), MENU, NEGOZIO e, nei mondi
+  2/3, SPRITZ NN% (lampeggia se mai provato). Tenuto premuto
+  (`longPressMs`) → dritto alla **griglia armi**.
+- Griglia: armi possedute (`ownedWeapons`, ordine di `WEAPON_REGISTRY`) a
+  celle da `cellW x cellH`, `pickCols` per riga; icone con `weaponMeta()`
+  di `Shop.ts` (istanza con contesto inerte, in cache). Arma attiva in
+  arancio con cornice gialla, il dito su una cella mostra il nome in alto.
+  Righe quante ne entrano fino al fondo (max `pickMaxRows`), poi pagine
+  `< n/N >`. Tocco su una cella → `weapon:request` e chiusura.
+- Chiusura automatica: tocco fuori dal menu (il tocco arriva comunque a
+  Game: si chiude e si colpisce Tony nello stesso gesto), `ragdoll:grab`,
+  `damage` non da urto (`weaponId !== 'impact'`), X, di nuovo il pulsantino,
+  o `autoCloseMs` senza tocchi sul menu. I tocchi sul pannello li assorbe
+  una `Zone` di fondo, quindi non arrivano a Game.
 
 ## 9c. Minigioco SPRITZ (`scenes/Spritz.ts`, `gfx/spritzSprites.ts`, `SPRITZ` in balance.ts)
 
-- Solo nei mondi 2 e 3: la UI mostra il pulsante arancio "SPRITZ NN%" sopra
-  NEGOZIO (legge `Game.world`; pulsa finché non è mai stato provato). Il tocco
+- Solo nei mondi 2 e 3: il menu rapido dell'HUD ha il pulsante arancio
+  "SPRITZ NN%" sotto NEGOZIO (legge `Game.world`; pulsa, insieme al
+  pulsantino del menu, finché non è mai stato provato). Il tocco
   ferma Shop/Settings e fa `scene.launch('Spritz', { world })`.
 - `Spritz` (scena sovrapposta, in `main.ts` sopra ProgressHUD): mette in pausa
   Game, tendine nere a scatti, addormenta UI e ProgressHUD, "salita" sulla
@@ -448,5 +475,3 @@ segnaposto `s`/`h`/`l` convertiti da `skin()` (costanti `SKIN_*` in
 
 - Altre armi.
 - Livelli/XP (`level:up`, campi `level`/`xp` già nel save).
-- Barra di selezione armi (il riquadro arma in basso a sinistra dell'HUD
-  mostra già l'arma attiva da `weapon:selected`).
