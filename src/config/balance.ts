@@ -209,6 +209,9 @@ export const WEAPON_STATS = {
     bodyShare: 0.15,
     /** tolleranza (px) del colpo attorno alle parti di Tony */
     hitTolerance: 3,
+    /** colpi nel caricatore, poi ricarica automatica (breve) */
+    magSize: 8,
+    reloadMs: 480,
   },
   mitragliatrice: {
     price: 0, // prezzo in SHOP.prices
@@ -220,6 +223,15 @@ export const WEAPON_STATS = {
     hitTolerance: 2,
     /** raggio massimo (px) della dispersione casuale attorno al dito */
     spread: 6,
+    /** dispersione extra per colpo della raffica (px) e suo massimo */
+    spreadGrowth: 0.35,
+    spreadMax: 7,
+    /** rinculo: la mira sale di climbPerShot px a colpo, fino a climbMax */
+    climbPerShot: 0.9,
+    climbMax: 14,
+    /** caricatore e ricarica automatica */
+    magSize: 30,
+    reloadMs: 650,
   },
   // ---- FEATURE C: esplosivi ----
   granata: {
@@ -328,6 +340,12 @@ export const FIREARMS = {
   shellBlinkMs: 700,
   shellBlinkStepMs: 90,
   shellDepth: 17,
+  /** con l'arma in mano (gunView) i bossoli cadono sul pavimento in primo piano */
+  shellFloorY: 297,
+  shellViewVx: 1.6,
+  /** shake a ogni colpo (px interi, ms) */
+  shotShakePx: 1,
+  shotShakeMs: 60,
 } as const;
 
 // ---- FEATURE C: esplosivi ----
@@ -792,4 +810,78 @@ export const WEATHER = {
   /** forzato da debug: gocciolio intenso per quanto, e a che ritmo */
   dripBurstMs: 20000,
   dripBurstEveryMs: [150, 450],
+} as const;
+
+// ---- ANIMAZIONI: armi da fuoco ----
+
+/**
+ * Arma in mano a schermo (weapons/gunView.ts, stile FPS rétro): pistola e
+ * mitragliatrice disegnate in basso, sopra Tony e sotto l'HUD. Tempi in ms,
+ * distanze in px logici, velocità in px/step.
+ */
+export const GUN_VIEW = {
+  /** riga più bassa dello sprite: sopra la fascia HUD (y 300..315) */
+  baseY: 299,
+  /** a riposo l'arma sta a destra (mano destra), così non copre Tony al centro */
+  centerX: 128,
+  /** l'arma segue il bersaglio in orizzontale (frazione) entro [minX, maxX] */
+  follow: 0.35,
+  minX: 66,
+  maxX: 146,
+  /** px al frame massimi dello spostamento orizzontale (a scatti) */
+  followStepPx: 3,
+  /** senza tocchi per tanto, torna al centro */
+  idleReturnMs: 1400,
+  /** oscillazione a riposo: 1px, 2 frame */
+  bobMs: 420,
+  /** pose: inclinazione (shear) e soglie dell'angolo di mira (rad, 0 = dritto in su) */
+  poseSlopes: [-0.34, -0.17, 0, 0.17, 0.34],
+  poseAngles: [-0.5, -0.17, 0.17, 0.5],
+  /** rinculo: offset y per frame (px, negativo = su) */
+  kickFrames: [-3, -2, -1],
+  kickFrameMs: 30,
+  /** frame con carrello/otturatore indietro dopo lo sparo */
+  slideFrames: 2,
+  /** vampata alla volata e alone attorno alla canna */
+  flashFrameMs: 32,
+  haloMs: 34,
+  /** tracciante: quanto resta visibile (>= 1 frame) */
+  tracerMs: 34,
+  /** frazione del tracciante (dalla bocca) disegnata in bianco (poi bianco/giallo) */
+  tracerWhite: 0.4,
+  /** fumo dalla canna */
+  maxSmoke: 18,
+  smokeLifeMs: 900,
+  smokeRise: 0.32,
+  smokeDrift: 0.12,
+  /** pausa dopo l'ultimo colpo prima che esca il fumo */
+  smokeDelayMs: 160,
+  smokeEveryMs: 110,
+  /** puff dopo un colpo singolo / dopo una raffica (in più se la canna è calda) */
+  smokePuffsSingle: 3,
+  smokePuffsBurst: 5,
+  smokePuffsHot: 4,
+  /** caricatore che cade durante la ricarica */
+  magGravity: 0.25,
+  magDropVx: -0.7,
+  /** abbassamento dell'arma nei 4 frame di ricarica */
+  reloadDip: [2, 5, 3, 1],
+  /** canna che si scalda (mitra): calore per colpo, raffreddamento al secondo, soglie */
+  heatPerShot: 0.07,
+  coolPerSec: 0.32,
+  heatWarm: 0.45,
+  heatHot: 0.8,
+  /** mitra: offset x casuale del rinculo (px) e ondeggio del recoil pattern */
+  mitraKickJitterX: 1,
+  mitraWander: 2.5,
+  /** la raffica si "azzera" dopo tanto senza sparare */
+  burstResetMs: 260,
+  /** profondità: sopra Tony (10..16), sotto particelle (50) e HUD (scena UI) */
+  depth: 30,
+  haloDepth: 29,
+  tracerDepth: 29.5,
+  magDepth: 30.5,
+  shellDepth: 31,
+  flashDepth: 32,
+  smokeDepth: 33,
 } as const;
