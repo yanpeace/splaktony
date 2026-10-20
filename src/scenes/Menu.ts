@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { MENU, MOOD, SCREEN } from '../config/balance';
 import { C, col, hex, type ColorIndex } from '../config/palette';
 import { unlockAudio } from '../audio/sfx';
+import { drawSiteBackdrop } from '../entities/Room';
 import { pixelText } from '../gfx/pixelFont';
 import { ArcadeButton, drawPanel } from '../gfx/ui';
 
@@ -100,13 +101,8 @@ export class Menu extends Phaser.Scene {
   // ---------------------------------------------------------- sfondo
 
   private buildBackground(): void {
-    const floorH = 28;
-    this.add.tileSprite(0, 0, SCREEN.width, SCREEN.height - floorH, 'room-wallpaper').setOrigin(0);
-    this.add.tileSprite(0, SCREEN.height - floorH, SCREEN.width, floorH, 'room-floor').setOrigin(0);
-    const g = this.add.graphics();
-    // battiscopa
-    g.fillStyle(col(C.black));
-    g.fillRect(0, SCREEN.height - floorH - 2, SCREEN.width, 2);
+    // stesso cantiere del gioco, tutto a depth 0 (titolo, altalena e pulsanti sopra)
+    drawSiteBackdrop(this, { flat: true });
     pixelText(this, SCREEN.width / 2, SCREEN.height - 15, 'V0.1', C.plum, C.black).setOrigin(0.5, 0);
   }
 
