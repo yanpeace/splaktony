@@ -14,10 +14,13 @@ import {
   TBM_BEACONS_XY,
   TBM_CUTTER_XY,
   TBM_SHIELD_XY,
+  ROAD,
   TW,
-  WAGON_SIZES,
-  WAGON_W,
+  VEHICLE_SIZES,
+  VEHICLE_SPIN_MIN,
+  VEHICLE_W,
   proj,
+  vehicleKey,
   registerTunnelSprites,
   signTopLeft,
 } from '../gfx/tunnelSprites';
@@ -28,20 +31,26 @@ import {
  *
  * - sfondo statico (una sola immagine 180x320): volta ad anelli di conci,
  *   tubo di ventilazione giallo appeso in chiave, cavi e staffe a sinistra,
- *   nastro trasportatore a destra, binari con traversine, canaletta con grata,
- *   pozzanghere, armadio rosso, armadietti, numeri degli anelli, cartelli
- *   appesi (uscita di emergenza, distanza), soletta del terreno (y 292..319);
+ *   nastro trasportatore a destra, carreggiata in asfalto con mezzeria
+ *   tratteggiata, margini e catarifrangenti, cordoli e marciapiedi di servizio,
+ *   canaletta con grata, pozzanghere e riflessi dei neon, armadio rosso,
+ *   armadietti, numeri degli anelli, cartelli appesi (uscita di emergenza,
+ *   distanza), terreno di gioco in asfalto (y 292..319);
  * - 7 barre a neon in prospettiva: lampeggiano a scatti, ogni tanto una
  *   sfarfalla e si spegne (la sua "maschera d'ombra" scurisce la zona che
  *   illuminava), poi si riaccende; un colpo forte ne fa sfarfallare una;
  * - in fondo la talpa: testa fresante a 4 frame che gira, vibrazione e spinta
  *   di 1px, lampeggianti arancio, fumi e polvere in pool, scintille sul bordo,
  *   scavo a cicli con soste e ronzio basso;
- * - detriti che scorrono sul nastro, vagonetto che fa la spola sui binari con
- *   il lampeggiante giallo, 2 operai lontani, luce di emergenza a raffiche.
+ * - detriti che scorrono sul nastro, navetta da cantiere a 4 ruote (cassone
+ *   passeggeri rialzato a finestrelle) che fa la spola sull'asfalto tra le
+ *   fermate: verso di noi nella corsia sinistra con i fari e il loro alone,
+ *   lontano nella destra con le luci rosse; lampeggiante arancio, ruote a 2
+ *   frame, polvere; 2 operai lontani, luce di emergenza a raffiche.
  *
  * Depth: sfondo 0, ombre dei neon 0.05, neon/luce di emergenza 0.1, detriti
- * 0.12, talpa 0.2..0.22, vagonetto 0.24, operai 0.25, fumi 0.3, scintille 2.3.
+ * 0.12, talpa 0.2..0.22, alone dei fari 0.235, polvere 0.236 / 0.244, navetta
+ * 0.24, operai 0.25, fumi 0.3, scintille 2.3.
  * Prestazioni: ~50 oggetti creati una volta (pool compresi); cambiano solo
  * texture, posizione e visibilità. Niente corpi fisici (vedi buildRoomBodies).
  */
@@ -55,7 +64,7 @@ const D_DEBRIS = 0.12;
 const D_TBM = 0.2;
 const D_CUTTER = 0.21;
 const D_BEACON = 0.22;
-const D_WAGON = 0.24;
+const D_VEH = 0.24;
 const D_WORKER = 0.25;
 const D_SMOKE = 0.3;
 const D_SPARK = 2.3;
@@ -187,28 +196,41 @@ export function buildTunnelWorld(scene: Phaser.Scene): void {
     drawDebris(d);
   });
 
-  // ---- vagonetto
-  const wagon = add(0, 0, `tw-wagon-b${WAGON_SIZES[0]}`, D_WAGON);
-  const wBeacon = add(0, 0, 'tw-wbeacon-off', D_WAGON + 0.001);
-  let wagonZ = S.wagonStops[0];
-  let wagonStop = 0;
-  let wagonWait = rand(S.wagonStopMinMs, S.wagonStopMaxMs);
-  let wagonFront = true;
-  let wagonAcc = 0;
-  let wBeaconAcc = 0;
-  let wBeaconOn = false;
-  const drawWagon = () => {
-    const want = (WAGON_W * TW.f) / wagonZ;
-    let w = WAGON_SIZES[0];
-    for (const s of WAGON_SIZES) if (Math.abs(s - want) < Math.abs(w - want)) w = s;
-    const key = `tw-wagon-${wagonFront ? 'f' : 'b'}${w}`;
-    if (wagon.texture.key !== key) wagon.setTexture(key);
-    const bottom = Math.round(proj(0, TW.yf, wagonZ).y) - 1;
-    const h = wagon.height;
-    wagon.setPosition(TW.vpX - w / 2, bottom - h + 1);
-    wBeacon.setPosition(TW.vpX - 1, bottom - h - 1);
+  // ---- navetta da cantiere sull'asfalto
+  const veh = add(0, 0, vehicleKey(VEHICLE_SIZES[0], true, 0), D_VEH);
+  const vGlow = add(0, 0, `tw-vglow${VEHICLE_SIZES[0]}`, D_VEH - 0.005);
+  const vBeacon = add(0, 0, 'tw-vbeacon-off', D_VEH + 0.001);
+  let vehZ = S.vehicleStops[0];
+  let vehStop = 0;
+  let vehWait = rand(S.vehicleStopMinMs, S.vehicleStopMaxMs);
+  let vehFront = true;
+  let vehX = -ROAD.lane;
+  let vehAcc = 0;
+  let vBeaconAcc = 0;
+  let vBeaconOn = false;
+  let wheelFrame: 0 | 1 = 0;
+  let wheelAcc = 0;
+  let dustLeft = 0;
+  const drawVehicle = () => {
+    const want = (VEHICLE_W * TW.f) / vehZ;
+    let w = VEHICLE_SIZES[0];
+    for (const s of VEHICLE_SIZES) if (Math.abs(s - want) < Math.abs(w - want)) w = s;
+    const key = vehicleKey(w, vehFront, w >= VEHICLE_SPIN_MIN ? wheelFrame : 0);
+    if (veh.texture.key !== key) veh.setTexture(key);
+    const p = proj(vehX, TW.yf, vehZ);
+    const bottom = Math.round(p.y) - 1;
+    const h = veh.height;
+    const cx = Math.round(p.x);
+    veh.setPosition(cx - w / 2, bottom - h + 1);
+    vBeacon.setPosition(cx - 1, bottom - h - 1);
+    vGlow.setVisible(vehFront);
+    if (vehFront) {
+      const gk = `tw-vglow${w}`;
+      if (vGlow.texture.key !== gk) vGlow.setTexture(gk);
+      vGlow.setPosition(cx - vGlow.width / 2, bottom + 1);
+    }
   };
-  drawWagon();
+  drawVehicle();
 
   // ---- operai lontani
   const workers = WORKERS.map((wk) => {
@@ -231,12 +253,34 @@ export function buildTunnelWorld(scene: Phaser.Scene): void {
     p.img.setPosition(Math.round(p.x - rows[0].length / 2), Math.round(p.y - rows.length / 2));
     p.img.setVisible(ph < 3 || p.step % 2 === 0);
   };
-  const spawnPuff = (x: number, y: number, set: 0 | 1, drift: number) => {
-    const p = puffs.find((q) => !q.active);
-    if (!p) return;
+  const spawnPuff = (x: number, y: number, set: 0 | 1, drift: number, pool: Puff[] = puffs) => {
+    const p = pool.find((q) => !q.active);
+    if (!p) return undefined;
     Object.assign(p, { x, y, set, drift, step: 0, active: true });
     drawPuff(p);
+    return p;
   };
+  const stepPuffs = (pool: Puff[]) => {
+    for (const p of pool) {
+      if (!p.active) continue;
+      p.step++;
+      if (p.step >= S.smokeSteps) {
+        p.active = false;
+        p.img.setVisible(false);
+        continue;
+      }
+      if (p.set === 0) p.y -= p.step % 2 === 0 ? 2 : 1;
+      else if (p.step % 2 === 0) p.y -= 1;
+      if (p.step % 2 === 0) p.x += p.drift;
+      drawPuff(p);
+    }
+  };
+  // polvere sollevata dalle ruote della navetta (pool a parte, depth secondo il verso)
+  const dust: Puff[] = [];
+  for (let i = 0; i < S.vehicleDustPool; i++) {
+    const img = add(0, 0, 'tw-smoke1-0', D_VEH - 0.004).setVisible(false);
+    dust.push({ img, x: 0, y: 0, drift: 0, set: 1, step: 0, active: false });
+  }
 
   // ---- stato
   let running = true;
@@ -345,19 +389,8 @@ export function buildTunnelWorld(scene: Phaser.Scene): void {
     smokeAcc += dt;
     if (smokeAcc >= S.smokeStepMs) {
       smokeAcc %= S.smokeStepMs;
-      for (const p of puffs) {
-        if (!p.active) continue;
-        p.step++;
-        if (p.step >= S.smokeSteps) {
-          p.active = false;
-          p.img.setVisible(false);
-          continue;
-        }
-        if (p.set === 0) p.y -= p.step % 2 === 0 ? 2 : 1;
-        else if (p.step % 2 === 0) p.y -= 1;
-        if (p.step % 2 === 0) p.x += p.drift;
-        drawPuff(p);
-      }
+      stepPuffs(puffs);
+      stepPuffs(dust);
     }
 
     // ---- nastro: i detriti scorrono solo mentre la talpa scava
@@ -442,32 +475,54 @@ export function buildTunnelWorld(scene: Phaser.Scene): void {
       }
     }
 
-    // ---- vagonetto: spola tra le fermate
-    wagonAcc += dt;
-    if (wagonAcc >= S.wagonStepMs) {
-      const step = wagonAcc;
-      wagonAcc = 0;
-      if (wagonWait > 0) {
-        wagonWait -= step;
-        if (wagonWait <= 0) wagonStop = (wagonStop + 1) % S.wagonStops.length;
-        if (wBeaconOn) {
-          wBeaconOn = false;
-          wBeacon.setTexture('tw-wbeacon-off');
+    // ---- navetta: spola tra le fermate sull'asfalto, nella sua corsia
+    vehAcc += dt;
+    if (vehAcc >= S.vehicleStepMs) {
+      const step = vehAcc;
+      vehAcc = 0;
+      if (vehWait > 0) {
+        vehWait -= step;
+        if (vehWait <= 0) vehStop = (vehStop + 1) % S.vehicleStops.length;
+        if (vBeaconOn) {
+          vBeaconOn = false;
+          vBeacon.setTexture('tw-vbeacon-off');
         }
       } else {
-        const target = S.wagonStops[wagonStop];
-        const dz = (S.wagonSpeed * step) / 1000;
-        wagonFront = target < wagonZ;
-        if (Math.abs(target - wagonZ) <= dz) {
-          wagonZ = target;
-          wagonWait = rand(S.wagonStopMinMs, S.wagonStopMaxMs);
-        } else wagonZ += wagonZ < target ? dz : -dz;
-        drawWagon();
-        wBeaconAcc += step;
-        if (wBeaconAcc >= S.wagonBeaconMs) {
-          wBeaconAcc %= S.wagonBeaconMs;
-          wBeaconOn = !wBeaconOn;
-          wBeacon.setTexture(wBeaconOn ? 'tw-wbeacon-on' : 'tw-wbeacon-off');
+        const target = S.vehicleStops[vehStop];
+        const dz = (S.vehicleSpeed * step) / 1000;
+        vehFront = target < vehZ;
+        if (Math.abs(target - vehZ) <= dz) {
+          vehZ = target;
+          vehWait = rand(S.vehicleStopMinMs, S.vehicleStopMaxMs);
+        } else vehZ += vehZ < target ? dz : -dz;
+        // verso chi guarda tiene la corsia sinistra (a schermo), allontanandosi la destra
+        const laneX = vehFront ? -ROAD.lane : ROAD.lane;
+        const dx = (S.vehicleLaneSpeed * step) / 1000;
+        vehX = Math.abs(laneX - vehX) <= dx ? laneX : vehX + Math.sign(laneX - vehX) * dx;
+        wheelAcc += step;
+        if (wheelAcc >= S.vehicleWheelMs) {
+          wheelAcc %= S.vehicleWheelMs;
+          wheelFrame = wheelFrame === 0 ? 1 : 0;
+        }
+        drawVehicle();
+        vBeaconAcc += step;
+        if (vBeaconAcc >= S.vehicleBeaconMs) {
+          vBeaconAcc %= S.vehicleBeaconMs;
+          vBeaconOn = !vBeaconOn;
+          vBeacon.setTexture(vBeaconOn ? 'tw-vbeacon-on' : 'tw-vbeacon-off');
+        }
+        // polvere leggera dietro le ruote
+        dustLeft -= step;
+        if (dustLeft <= 0) {
+          dustLeft = rand(S.vehicleDustMinMs, S.vehicleDustMaxMs);
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const bottom = Math.round(veh.y + veh.height - 1);
+          const half = veh.width / 2;
+          const cx = veh.x + half;
+          const p = vehFront
+            ? spawnPuff(cx + side * (half + 1), bottom - 1, 1, side, dust) // dietro: spunta ai lati
+            : spawnPuff(cx + side * (half - 2), bottom + 1, 1, side, dust); // dietro = verso di noi
+          p?.img.setDepth(vehFront ? D_VEH - 0.004 : D_VEH + 0.004);
         }
       }
     }

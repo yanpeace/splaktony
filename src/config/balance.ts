@@ -931,13 +931,21 @@ export const TUNNEL_WORLD = {
   emergencyMaxMs: 11000,
   emergencyBlinks: 6,
   emergencyMs: 220,
-  /** vagonetto: fermate (profondità mondo) percorse in ciclo, sosta stopMinMs..stopMaxMs */
-  wagonStops: [240, 150, 240, 322] as readonly number[],
-  wagonSpeed: 55,
-  wagonStepMs: 50,
-  wagonStopMinMs: 4000,
-  wagonStopMaxMs: 9000,
-  wagonBeaconMs: 260,
+  /** navetta da cantiere: fermate (profondità mondo) percorse in ciclo, sosta stopMinMs..stopMaxMs */
+  vehicleStops: [240, 140, 240, 322] as readonly number[],
+  vehicleSpeed: 55,
+  vehicleStepMs: 50,
+  vehicleStopMinMs: 4000,
+  vehicleStopMaxMs: 9000,
+  vehicleBeaconMs: 260,
+  /** cambio di corsia (mondo/s): verso chi guarda va a sinistra, quando si allontana a destra */
+  vehicleLaneSpeed: 22,
+  /** ruote: un frame del battistrada ogni wheelMs mentre si muove (solo taglie grandi) */
+  vehicleWheelMs: 90,
+  /** polvere dietro le ruote: pool e uno sbuffo ogni dustMinMs..dustMaxMs in marcia */
+  vehicleDustPool: 8,
+  vehicleDustMinMs: 120,
+  vehicleDustMaxMs: 260,
   /** operai lontani: cambio di posa */
   workerMinMs: 500,
   workerMaxMs: 1400,
