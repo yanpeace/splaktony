@@ -14,6 +14,7 @@ import { events, Subscriptions } from '../systems/events';
 import { bindHitFeedback } from '../systems/feedback';
 import { getSave } from '../systems/save';
 import { installUpgrades } from '../systems/upgrades';
+import { bindWeather } from '../systems/weather';
 import { WEAPON_REGISTRY } from '../weapons/registry';
 import type { Weapon, WeaponContext, WeaponPointer } from '../weapons/Weapon';
 
@@ -92,6 +93,7 @@ export class Game extends Phaser.Scene {
       bindCarCrash(this, { auto: !intro }); // cantiere: albero al centro + incidente ogni tanto
     }
     this.ragdoll = new Ragdoll(this);
+    bindWeather(this, this.ragdoll, { outdoor: true });
 
     const ctx: WeaponContext = { scene: this, ragdoll: this.ragdoll, dealDamage };
     for (const entry of WEAPON_REGISTRY) {
