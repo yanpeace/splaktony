@@ -499,3 +499,18 @@ export const MENU = {
   /** vibrazione sui colpi forti (ms) */
   vibrateMs: 30,
 } as const;
+
+// ---- CANTIERE: sfondo ----
+
+/** Contratto di layout dello sfondo (strada di sabbia, zona dell'albero). */
+export const SITE = {
+  /** strada di sabbia orizzontale: y roadTop..roadBottom, tutta la larghezza */
+  roadTop: 168,
+  roadBottom: 186,
+  /** x del tronco dell'albero (poggia su roadTop) */
+  treeX: 90,
+  /** zona riservata all'albero: niente oggetti qui (solo cielo e sfondo lontano) */
+  treeZone: { left: 70, right: 110, top: 110, bottom: 170 },
+  /** linea dell'orizzonte (fine del cielo, inizio dello sterrato dietro la strada) */
+  horizon: 160,
+} as const;
