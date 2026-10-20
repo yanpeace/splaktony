@@ -3,6 +3,7 @@ import { GRAB, PHYSICS } from '../config/balance';
 import { unlockAudio } from '../audio/sfx';
 import { Ragdoll } from '../entities/Ragdoll';
 import { buildRoom } from '../entities/Room';
+import { bindCarCrash } from '../entities/CarCrash';
 import { isFrozen } from '../gfx/effects';
 import { dealDamage } from '../systems/damage';
 import { events, Subscriptions } from '../systems/events';
@@ -43,6 +44,7 @@ export class Game extends Phaser.Scene {
     this.input.addPointer(2);
 
     buildRoom(this);
+    bindCarCrash(this); // cantiere: albero al centro + incidente ogni tanto
     this.ragdoll = new Ragdoll(this);
 
     const ctx: WeaponContext = { scene: this, ragdoll: this.ragdoll, dealDamage };

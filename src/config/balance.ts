@@ -499,3 +499,50 @@ export const MENU = {
   /** vibrazione sui colpi forti (ms) */
   vibrateMs: 30,
 } as const;
+
+// ---- CANTIERE: incidente ----
+
+/**
+ * Incidente (entities/CarCrash.ts): ogni tanto un'utilitaria blu entra lungo
+ * la strada e si schianta contro l'albero al centro. Parte SOLO su eventi
+ * "importanti", con un cooldown e mai due insieme. Tempi in ms di gioco.
+ */
+export const CRASH = {
+  /** pausa minima tra l'inizio di due incidenti (45 s: raro, resta una sorpresa) */
+  cooldownMs: 45000,
+  /** colpo singolo da almeno questi danni (evento 'damage') */
+  bigHitDamage: 60,
+  /** 'level:up' sui livelli multipli di questo numero */
+  levelEvery: 3,
+  /** la combo arriva a questo moltiplicatore (prima volta nella catena) → sempre */
+  comboMult: 5,
+  /** combo più bassa (prima volta nella catena) → solo con questa probabilità */
+  smallComboMult: 3,
+  smallComboChance: 0.25,
+  /** ritardo dopo un level up: "LEVEL UP!" e "SBAM!" non si sovrappongono */
+  levelUpDelayMs: 1500,
+  /** monete bonus = bonusBase + bonusPerLevel * livello (liv. 1 = 110, liv. 9 = 190) */
+  bonusBase: 100,
+  bonusPerLevel: 10,
+  /** durata di un "frame" dell'animazione: tutto si muove a scatti di pixel interi */
+  frameMs: 60,
+  /** entrata: velocità iniziale, accelerazione per frame e massima (px/frame) */
+  enterSpeed: 1,
+  enterAccel: 0.4,
+  enterMaxSpeed: 5,
+  /** scossone all'impatto */
+  shakePx: 4,
+  shakeMs: 450,
+  /** dopo l'impatto: fumo dal cofano, frecce e clacson incantato */
+  smokeMs: 2600,
+  smokeEveryMs: 180,
+  /** vita di uno sbuffo di fumo */
+  puffMs: 900,
+  hazardMs: 240,
+  hornEveryMs: 330,
+  hornCount: 6,
+  /** uscita: l'auto lampeggia e sparisce */
+  leaveMs: 900,
+  /** scritta "SBAM!" + monete */
+  textMs: 1700,
+} as const;
