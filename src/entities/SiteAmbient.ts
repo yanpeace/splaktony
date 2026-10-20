@@ -2,21 +2,28 @@ import Phaser from 'phaser';
 import { SITE_AMBIENT as S } from '../config/balance';
 import { makeSprite, type SpriteData } from '../gfx/pixelSprite';
 import { Subscriptions } from '../systems/events';
+import { HORIZON_Y, NEAR_Y, TREE, TUNNEL, roadAt } from './siteLayout';
 
 /**
- * Animazioni ambientali del cantiere: lo sfondo "vive" dietro Tony.
+ * Animazioni ambientali del cantiere della galleria: lo sfondo "vive" dietro Tony.
+ * Le posizioni derivano tutte da siteLayout.ts (strada a curve in prospettiva).
  *
  * - gru a torre a sinistra (pilone x 21..27, braccio y 50..53 da x 8 a 162):
  *   carrello che scorre a scatti, gancio con una trave che dondola a scatti
  *   (frame pre-disegnati, niente rotazioni sub-pixel), lampeggiante rosso in cima;
- * - lampeggianti giallo/arancio alternati su transenna e cono dello sfondo;
- * - bandierina a 2 frame (x 163) e sbuffi di polvere dalla strada.
+ * - galleria: 2 luci ai lati del portale che lampeggiano alternate e una fila
+ *   di lucine dentro la bocca che si accendono in sequenza verso il fondo;
+ * - coni con lampeggiante ai bordi della strada (3 taglie pre-disegnate, scelte
+ *   dalla scala 1/z), bandierina a terra a lato della strada;
+ * - sbuffi di polvere dai bordi della strada, più piccoli lontano.
  *
- * Prestazioni: 13 oggetti creati una volta sola (un'immagine statica per la
- * struttura della gru, il resto cambia solo texture/posizione); la polvere usa
- * un piccolo pool interno. Niente corpi fisici, niente creazione continua.
- * Layout: niente nella zona dell'albero/incidente (x 60..120, y 105..190).
+ * Prestazioni: 11 oggetti creati una volta sola (+ pool della polvere); cambiano
+ * solo texture/posizione. Niente corpi fisici, niente creazione continua.
+ * Layout: niente nella zona dell'albero (x 52..76, y 150..178) né sul tratto
+ * dritto dell'auto (da roadAt(CRASH_LEAVE_Z) all'albero).
+ * Chiavi texture: prefisso `amb-` (le `site-*` sono dello sfondo).
  */
+
 
 // ---------------------------------------------------------------- disegno a griglia
 
@@ -157,57 +164,122 @@ function hangSprite(step: number): string[] {
 const TROLLEY: SpriteData = ['eddddde', '.eeeee.', '..e4e..'];
 const BEACON_ON: SpriteData = ['.2.', '232'];
 const BEACON_OFF: SpriteData = ['.1.', '111'];
-const LAMP_Y_ON: SpriteData = ['.4.', '4c4', '.f.'];
-const LAMP_O_ON: SpriteData = ['.3.', '343', '.f.'];
-const LAMP_OFF: SpriteData = ['.1.', '111', '.f.'];
 
+// ---------------------------------------------------------------- coni con lampeggiante
 
+/** colori del lampeggiante: [esterno, centro] acceso giallo / acceso arancio / spento */
+type LampColor = 'y' | 'o' | 'off';
+const LAMP_PIX: Record<LampColor, [string, string]> = { y: ['4', 'c'], o: ['3', '4'], off: ['1', '1'] };
 
-/** Palo + bandierina al vento (verso destra), 2 frame. */
-function flagSprite(frame: 0 | 1): string[] {
-  const g = new Grid(0, 0, 8, 31);
-  g.set(0, 0, '4');
-  g.rect(0, 1, 1, 30, 'e');
-  g.blit(
-    1,
-    1,
-    frame === 0
-      ? ['33.....', '33332..', '3333322', '332....']
-      : ['332....', '3333322', '33332..', '33.....'],
-  );
+/** Corpo del cono (arancio a strisce bianche) per taglia: 0 grande, 1 media, 2 piccola. */
+const CONE_BODY: readonly SpriteData[] = [
+  ['...3...', '..333..', '..ccc..', '.33333.', '.ccccc.', '3333333', 'fffffff'],
+  ['..3..', '.333.', '.ccc.', '33333', 'fffff'],
+  ['.3.', '3c3', 'fff'],
+];
+
+/** Cono + lampeggiante in cima, già composto (un'immagine sola per cono). */
+function coneSprite(size: number, c: LampColor): string[] {
+  const body = CONE_BODY[size];
+  const w = body[0].length;
+  const [a, b] = LAMP_PIX[c];
+  const pad = (s: string) => {
+    const l = (w - s.length) >> 1;
+    return '.'.repeat(l) + s + '.'.repeat(w - s.length - l);
+  };
+  const lamp = size === 2 ? [pad(a)] : [pad(a), pad(a + b + a), pad('f')];
+  return [...lamp, ...body];
+}
+
+/** taglia del cono dalla scala a schermo */
+const coneSize = (s: number) => (s >= 0.5 ? 0 : s >= 0.3 ? 1 : 2);
+
+// ---------------------------------------------------------------- galleria
+
+/** luci ai lati del portale (2x2), a metà altezza dell'arco */
+const PORTAL_Y = TUNNEL.y - Math.round(TUNNEL.h / 2) - 1;
+const PORTAL_LX = TUNNEL.x - (TUNNEL.w >> 1) - 3;
+const PORTAL_RX = TUNNEL.x + (TUNNEL.w >> 1) + 1;
+const PORTAL_ON_Y: SpriteData = ['c4', '43'];
+const PORTAL_ON_O: SpriteData = ['43', '32'];
+const PORTAL_OFF: SpriteData = ['11', '1f'];
+
+/** le due luci in un'immagine sola: frame 0 sinistra accesa, frame 1 destra accesa */
+function portalSprite(frame: 0 | 1): string[] {
+  const g = new Grid(PORTAL_LX, PORTAL_Y, PORTAL_RX - PORTAL_LX + 2, 2);
+  g.blit(PORTAL_LX, PORTAL_Y, frame === 0 ? PORTAL_ON_Y : PORTAL_OFF);
+  g.blit(PORTAL_RX, PORTAL_Y, frame === 0 ? PORTAL_OFF : PORTAL_ON_O);
   return g.rows();
 }
 
-const DUST: readonly SpriteData[] = [
-  ['.d.', '4d4'],
-  ['.d4.', '4dd4', '.44.'],
-  ['.d..e', '4..d.', '.e4..'],
-  ['d...', '...e'],
+/**
+ * Lucine sulle pareti dentro la bocca (oltre l'imbocco, z > Z_FAR), a metà
+ * altezza dell'arco: proiettate con la stessa prospettiva della strada.
+ */
+const WALL_Z = [9, 10.5, 12.5, 15] as const;
+/** mezza larghezza (mondo) della fila e altezza (mondo) da terra */
+const WALL_HALF = (TUNNEL.w / 2) * TUNNEL.z * 0.75;
+const WALL_H = (TUNNEL.h / 2) * TUNNEL.z;
+const WALL_PTS = WALL_Z.map((z) => ({
+  dx: Math.round(WALL_HALF / z),
+  y: Math.round(HORIZON_Y + (NEAR_Y - HORIZON_Y - WALL_H) / z),
+}));
+const WALL_X0 = TUNNEL.x - WALL_PTS[0].dx;
+const WALL_Y0 = Math.min(...WALL_PTS.map((p) => p.y));
+const WALL_Y1 = Math.max(...WALL_PTS.map((p) => p.y));
+
+/** frame k: la lucina k è accesa (gialla), la precedente sfuma (arancio), le altre spente */
+function wallSprite(k: number): string[] {
+  const n = WALL_PTS.length;
+  const g = new Grid(WALL_X0, WALL_Y0, WALL_PTS[0].dx * 2 + 1, WALL_Y1 - WALL_Y0 + 1);
+  WALL_PTS.forEach((p, i) => {
+    const c = i === k ? '4' : i === (k + n - 1) % n ? '3' : '1';
+    g.set(TUNNEL.x - p.dx, p.y, c);
+    g.set(TUNNEL.x + p.dx, p.y, c);
+  });
+  return g.rows();
+}
+
+// ---------------------------------------------------------------- bandierina e polvere
+
+/** Palo + bandierina al vento (verso destra), 2 frame, già in scala (~1/3). */
+const FLAG_H = 12;
+function flagSprite(frame: 0 | 1): string[] {
+  const g = new Grid(0, 0, 5, FLAG_H);
+  g.set(0, 0, '4');
+  g.rect(0, 1, 1, FLAG_H - 1, 'e');
+  g.blit(1, 1, frame === 0 ? ['33..', '3332', '32..'] : ['32..', '3332', '33..']);
+  return g.rows();
+}
+
+/** sbuffi: set 0 vicino (grandi), set 1 lontano (piccoli); 4 fasi ciascuno */
+const DUST: readonly (readonly SpriteData[])[] = [
+  [
+    ['.d.', '4d4'],
+    ['.d4.', '4dd4', '.44.'],
+    ['.d..e', '4..d.', '.e4..'],
+    ['d...', '...e'],
+  ],
+  [['d4'], ['.d', 'd4'], ['d.', '.e'], ['.d', 'e.']],
 ];
+/** scala sotto la quale si usano gli sbuffi piccoli */
+const DUST_FAR_S = 0.45;
 
 // ---------------------------------------------------------------- posizioni
 
 const BEACON_X = TOWER_C - 1;
 const BEACON_Y = APEX_Y - 2;
-/** sopra la transenna a terra (12, 279) e sulla punta del cono sullo sterrato (37, 157) */
-const LAMP_A_X = 14;
-const LAMP_A_Y = 276;
-const LAMP_B_X = 40;
-const LAMP_B_Y = 154;
-/** bandierina sullo sterrato dietro la strada, al bordo destro */
-const FLAG_X = 163;
-const FLAG_Y = 136;
-/** sbuffi di polvere: solo fuori dalla zona albero/incidente (x 60..120) */
-const DUST_SPANS: readonly [number, number][] = [
-  [12, 52],
-  [128, 166],
-];
-const DUST_Y_MIN = 182;
-const DUST_Y_MAX = 185;
 
-/** gru dietro recinzione e attrezzi (1..1.2) ma davanti al palazzo (0.5) */
+/** zona libera dell'albero dell'incidente: x 52..76, y 150..178 */
+const TREE_FREE = { x0: TREE.x - 12, x1: TREE.x + 12, y0: TREE.y - 23, y1: TREE.y + 5 };
+/** uno sbuffo nato in (x, y) che sale di h px (e scivola col vento) toccherebbe la zona? */
+const inTreeZone = (x: number, y: number, h: number) =>
+  x >= TREE_FREE.x0 - 3 && x <= TREE_FREE.x1 + 3 && y >= TREE_FREE.y0 && y - h <= TREE_FREE.y1;
+
+/** gru dietro lo sfondo vicino (1..1.2), tutto il resto 1.5..1.9 */
 const DEPTH_CRANE = 0.8;
 const DEPTH_LOAD = 0.9;
+const DEPTH_TUNNEL = 1.5;
 const DEPTH_PROPS = 1.8;
 const DEPTH_DUST = 1.9;
 
@@ -216,24 +288,34 @@ interface Puff {
   x: number;
   y: number;
   step: number;
+  set: 0 | 1;
   active: boolean;
 }
 
 function registerTextures(scene: Phaser.Scene): void {
-  makeSprite(scene, 'site-crane', craneSprite());
-  for (let k = -S.swingMaxSteps; k <= S.swingMaxSteps; k++) makeSprite(scene, `site-hang${k}`, hangSprite(k));
-  makeSprite(scene, 'site-trolley', TROLLEY);
-  makeSprite(scene, 'site-beacon-on', BEACON_ON);
-  makeSprite(scene, 'site-beacon-off', BEACON_OFF);
-  makeSprite(scene, 'site-lamp-y', LAMP_Y_ON);
-  makeSprite(scene, 'site-lamp-o', LAMP_O_ON);
-  makeSprite(scene, 'site-lamp-off', LAMP_OFF);
-  makeSprite(scene, 'site-flag0', flagSprite(0));
-  makeSprite(scene, 'site-flag1', flagSprite(1));
-  DUST.forEach((d, i) => makeSprite(scene, `site-dust${i}`, d));
+  makeSprite(scene, 'amb-crane', craneSprite());
+  for (let k = -S.swingMaxSteps; k <= S.swingMaxSteps; k++) makeSprite(scene, `amb-hang${k}`, hangSprite(k));
+  makeSprite(scene, 'amb-trolley', TROLLEY);
+  makeSprite(scene, 'amb-beacon-on', BEACON_ON);
+  makeSprite(scene, 'amb-beacon-off', BEACON_OFF);
+  for (let size = 0; size < CONE_BODY.length; size++) {
+    for (const c of ['y', 'o', 'off'] as const) makeSprite(scene, `amb-cone${size}-${c}`, coneSprite(size, c));
+  }
+  makeSprite(scene, 'amb-portal0', portalSprite(0));
+  makeSprite(scene, 'amb-portal1', portalSprite(1));
+  WALL_PTS.forEach((_, k) => makeSprite(scene, `amb-tunnel${k}`, wallSprite(k)));
+  makeSprite(scene, 'amb-flag0', flagSprite(0));
+  makeSprite(scene, 'amb-flag1', flagSprite(1));
+  DUST.forEach((set, j) => set.forEach((d, i) => makeSprite(scene, `amb-dust${j}-${i}`, d)));
 }
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
+
+/** Punto a terra appena fuori dal bordo della strada (lato -1/1) alla profondità z. */
+function roadside(z: number, side: number, extra: number): { x: number; y: number; s: number } {
+  const p = roadAt(z);
+  return { x: Math.round(p.x + side * (p.w / 2 + extra)), y: Math.round(p.y), s: p.s };
+}
 
 /**
  * Crea le animazioni del cantiere nella scena (una volta, in create()).
@@ -244,21 +326,37 @@ export function bindSiteAmbient(scene: Phaser.Scene): void {
   const add = (x: number, y: number, key: string, depth: number) =>
     scene.add.image(x, y, key).setOrigin(0).setDepth(depth);
 
-  add(CRANE_X0, CRANE_Y0, 'site-crane', DEPTH_CRANE);
-  const beacon = add(BEACON_X, BEACON_Y, 'site-beacon-on', DEPTH_CRANE);
+  // --- gru
+  add(CRANE_X0, CRANE_Y0, 'amb-crane', DEPTH_CRANE);
+  const beacon = add(BEACON_X, BEACON_Y, 'amb-beacon-on', DEPTH_CRANE);
   let trolleyX = Math.round(rand(S.trolleyMinX, S.trolleyMaxX));
-  const trolley = add(trolleyX - 3, TROLLEY_Y, 'site-trolley', DEPTH_LOAD);
-  const hang = add(trolleyX - HANG_CX, CABLE_Y, 'site-hang0', DEPTH_LOAD);
+  const trolley = add(trolleyX - 3, TROLLEY_Y, 'amb-trolley', DEPTH_LOAD);
+  const hang = add(trolleyX - HANG_CX, CABLE_Y, 'amb-hang0', DEPTH_LOAD);
 
-  // i lampeggianti stanno sopra la transenna e il cono disegnati dallo sfondo (Room.ts)
-  const lampA = add(LAMP_A_X, LAMP_A_Y, 'site-lamp-y', DEPTH_PROPS);
-  const lampB = add(LAMP_B_X, LAMP_B_Y, 'site-lamp-off', DEPTH_PROPS);
-  const flag = add(FLAG_X, FLAG_Y, 'site-flag0', DEPTH_PROPS);
+  // --- galleria
+  const portal = add(PORTAL_LX, PORTAL_Y, 'amb-portal0', DEPTH_TUNNEL);
+  const tunnel = add(WALL_X0, WALL_Y0, 'amb-tunnel0', DEPTH_TUNNEL);
+
+  // --- coni: base al centro sul terreno, appena fuori dal bordo della strada;
+  // i pari lampeggiano gialli, i dispari arancio, in controfase
+  const cones = S.cones.map(([z, side], i) => {
+    const r = roadside(z, side, 2 + 6 / z);
+    const size = coneSize(r.s);
+    const rows = coneSprite(size, 'off');
+    const odd = i % 2 === 1;
+    const color: LampColor = odd ? 'o' : 'y';
+    const img = add(r.x - (rows[0].length >> 1), r.y - rows.length + 1, `amb-cone${size}-${odd ? 'off' : color}`, DEPTH_PROPS);
+    return { img, size, color, odd };
+  });
+
+  // --- bandierina a terra a lato della strada (base del palo sul terreno)
+  const fp = roadside(S.flagZ, S.flagSide, 24 / S.flagZ);
+  const flag = add(fp.x, fp.y - FLAG_H + 1, 'amb-flag0', DEPTH_PROPS);
 
   const puffs: Puff[] = [];
   for (let i = 0; i < S.dustPool; i++) {
-    const img = add(0, 0, 'site-dust0', DEPTH_DUST).setVisible(false);
-    puffs.push({ img, x: 0, y: 0, step: 0, active: false });
+    const img = add(0, 0, 'amb-dust0-0', DEPTH_DUST).setVisible(false);
+    puffs.push({ img, x: 0, y: 0, step: 0, set: 0, active: false });
   }
 
   // stato
@@ -272,6 +370,10 @@ export function bindSiteAmbient(scene: Phaser.Scene): void {
   let beaconOn = true;
   let lampAcc = 0;
   let lampPhase = false;
+  let portalAcc = 0;
+  let portalFrame = 0;
+  let tunnelAcc = 0;
+  let tunnelFrame = 0;
   let flagAcc = 0;
   let flagFrame = 0;
   let dustLeft = rand(S.dustMinMs, S.dustMaxMs);
@@ -279,23 +381,37 @@ export function bindSiteAmbient(scene: Phaser.Scene): void {
 
   const placeHang = () => hang.setPosition(trolleyX - HANG_CX, CABLE_Y);
 
-  const spawnPuff = (x: number, y: number) => {
+  const drawPuff = (p: Puff) => {
+    const f = p.step < 2 ? 0 : p.step < 5 ? 1 : p.step < 7 ? 2 : 3;
+    const key = `amb-dust${p.set}-${f}`;
+    if (p.img.texture.key !== key) p.img.setTexture(key);
+    const rows = DUST[p.set][f];
+    p.img.setPosition(p.x - (rows[0].length >> 1), p.y - rows.length + 1);
+    // ultimi scatti: lampeggio invece di dissolvenza
+    p.img.setVisible(f !== 3 || p.step % 2 === 1);
+  };
+  const spawnPuff = (x: number, y: number, set: 0 | 1) => {
     const p = puffs.find((q) => !q.active);
     if (!p) return;
     p.active = true;
     p.x = x;
     p.y = y;
+    p.set = set;
     p.step = 0;
-    p.img.setVisible(true);
     drawPuff(p);
   };
-  const drawPuff = (p: Puff) => {
-    const f = p.step < 2 ? 0 : p.step < 5 ? 1 : p.step < 7 ? 2 : 3;
-    const key = `site-dust${f}`;
-    if (p.img.texture.key !== key) p.img.setTexture(key);
-    p.img.setPosition(p.x - (DUST[f][0].length >> 1), p.y);
-    // ultimi scatti: lampeggio invece di dissolvenza
-    if (f === 3) p.img.setVisible(p.step % 2 === 1);
+  /** sbuffo su un bordo a caso della strada, fuori dalla zona dell'albero */
+  const spawnDust = () => {
+    for (let tries = 0; tries < 6; tries++) {
+      const z = rand(S.dustZMin, S.dustZMax);
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const r = roadside(z, side, rand(-2, 3) / z);
+      if (inTreeZone(r.x, r.y, S.dustSteps)) continue;
+      const set = r.s >= DUST_FAR_S ? 0 : 1;
+      spawnPuff(r.x, r.y, set);
+      if (set === 0 && Math.random() < 0.4) spawnPuff(r.x + 4 * side, r.y + 1, 0);
+      return;
+    }
   };
 
   const onUpdate = (_t: number, dt: number) => {
@@ -326,39 +442,46 @@ export function bindSiteAmbient(scene: Phaser.Scene): void {
     const step = Phaser.Math.Clamp(Math.round(amp * Math.sin(phase)), -S.swingMaxSteps, S.swingMaxSteps);
     if (step !== hangStep) {
       hangStep = step;
-      hang.setTexture(`site-hang${step}`);
+      hang.setTexture(`amb-hang${step}`);
     }
 
-    // --- lampeggianti e bandierina
+    // --- lampeggianti: gru, coni, portale, lucine nella bocca
     beaconAcc += dt;
     if (beaconAcc >= S.beaconMs) {
       beaconAcc %= S.beaconMs;
       beaconOn = !beaconOn;
-      beacon.setTexture(beaconOn ? 'site-beacon-on' : 'site-beacon-off');
+      beacon.setTexture(beaconOn ? 'amb-beacon-on' : 'amb-beacon-off');
     }
     lampAcc += dt;
     if (lampAcc >= S.lampMs) {
       lampAcc %= S.lampMs;
       lampPhase = !lampPhase;
-      lampA.setTexture(lampPhase ? 'site-lamp-off' : 'site-lamp-y');
-      lampB.setTexture(lampPhase ? 'site-lamp-o' : 'site-lamp-off');
+      for (const c of cones) c.img.setTexture(`amb-cone${c.size}-${c.odd === lampPhase ? c.color : 'off'}`);
+    }
+    portalAcc += dt;
+    if (portalAcc >= S.tunnelLampMs) {
+      portalAcc %= S.tunnelLampMs;
+      portalFrame ^= 1;
+      portal.setTexture(`amb-portal${portalFrame}`);
+    }
+    tunnelAcc += dt;
+    if (tunnelAcc >= S.tunnelSeqMs) {
+      tunnelAcc %= S.tunnelSeqMs;
+      tunnelFrame = (tunnelFrame + 1) % WALL_PTS.length;
+      tunnel.setTexture(`amb-tunnel${tunnelFrame}`);
     }
     flagAcc += dt;
     if (flagAcc >= S.flagMs) {
       flagAcc %= S.flagMs;
       flagFrame ^= 1;
-      flag.setTexture(flagFrame ? 'site-flag1' : 'site-flag0');
+      flag.setTexture(flagFrame ? 'amb-flag1' : 'amb-flag0');
     }
 
     // --- polvere: nuovi sbuffi ogni tanto, salgono a scatti e svaniscono
     dustLeft -= dt;
     if (dustLeft <= 0) {
       dustLeft = rand(S.dustMinMs, S.dustMaxMs);
-      const [a, b] = DUST_SPANS[Math.random() < 0.5 ? 0 : 1];
-      const x = Math.round(rand(a, b - 6));
-      const y = Math.round(rand(DUST_Y_MIN, DUST_Y_MAX));
-      spawnPuff(x, y);
-      if (Math.random() < 0.4) spawnPuff(x + 4, y + 1);
+      spawnDust();
     }
     dustAcc += dt;
     if (dustAcc >= S.dustStepMs) {
@@ -371,7 +494,8 @@ export function bindSiteAmbient(scene: Phaser.Scene): void {
           p.img.setVisible(false);
           continue;
         }
-        p.y -= 1;
+        // lontano gli sbuffi salgono la metà
+        if (p.set === 0 || p.step % 2 === 0) p.y -= 1;
         if (p.step % 3 === 0) p.x += 1; // vento verso destra, come la bandierina
         drawPuff(p);
       }

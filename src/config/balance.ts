@@ -538,15 +538,30 @@ export const SITE_AMBIENT = {
   swingAmpStrong: 3,
   /** tempo per tornare all'ampiezza a riposo */
   swingDecayMs: 1800,
-  /** lampeggianti: rosso della gru e coppia arancio/gialla su transenna e cono */
+  /** lampeggianti: rosso della gru, coni a bordo strada (alternati) */
   beaconMs: 600,
   lampMs: 380,
-  /** bandierina */
+  /** luci ai lati del portale della galleria (alternate) */
+  tunnelLampMs: 450,
+  /** lucine dentro la bocca della galleria: una alla volta, dalla bocca verso il fondo */
+  tunnelSeqMs: 200,
+  /** coni con lampeggiante a bordo strada: [profondità z, lato (-1 sinistra, 1 destra)] */
+  cones: [
+    [1.6, 1],
+    [2.6, -1],
+    [3.6, 1],
+    [6, -1],
+  ] as readonly (readonly [number, number])[],
+  /** bandierina a terra a lato della strada: profondità z, lato */
+  flagZ: 3,
+  flagSide: 1,
   flagMs: 280,
-  /** polvere dalla strada: sbuffi in pool, uno ogni dustMinMs..dustMaxMs */
+  /** polvere dai bordi della strada: sbuffi in pool, uno ogni dustMinMs..dustMaxMs, a z dustZMin..dustZMax */
   dustPool: 4,
   dustMinMs: 1400,
   dustMaxMs: 3800,
+  dustZMin: 1.3,
+  dustZMax: 5,
   dustStepMs: 120,
   dustSteps: 9,
 } as const;
