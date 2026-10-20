@@ -93,7 +93,7 @@ export class Game extends Phaser.Scene {
       bindCarCrash(this, { auto: !intro }); // cantiere: albero al centro + incidente ogni tanto
     }
     this.ragdoll = new Ragdoll(this);
-    bindWeather(this, this.ragdoll, { outdoor: true });
+    bindWeather(this, this.ragdoll, { outdoor: this.worldId === 1 }); // in galleria solo gocce e correnti
 
     const ctx: WeaponContext = { scene: this, ragdoll: this.ragdoll, dealDamage };
     for (const entry of WEAPON_REGISTRY) {
