@@ -1,8 +1,8 @@
-// Genera le icone PWA pixel (192 e 512 PNG) da uno sprite in palette Sweetie 16.
+// Genera le icone PWA pixel (192 e 512 PNG) da uno sprite in palette Sweetie 16 (+ g rosa pelle).
 // Solo moduli built-in: zlib per la compressione PNG.
 //   node scripts/make-icons.mjs   → public/icons/icon-192.png, icon-512.png
 //
-// Disegno: faccia di Tony (stesso sprite di src/gfx/sprites.ts, 'tony-head')
+// Disegno: faccia di Tony col caschetto (stesso sprite di src/gfx/sprites.ts, 'tony-head')
 // al centro di una griglia 32x32 su fondo #1a1c2c, scalata nearest-neighbor
 // (x6 = 192, x16 = 512). La faccia occupa il centro (~55%): sicura anche come
 // icona "maskable" (zona sicura = cerchio dell'80%).
@@ -15,26 +15,28 @@ import { deflateSync } from 'node:zlib';
 const PALETTE = [
   '#1a1c2c', '#5d275d', '#b13e53', '#ef7d57', '#ffcd75', '#a7f070', '#38b764', '#257179',
   '#29366f', '#3b5dc9', '#41a6f6', '#73eff7', '#f4f4f4', '#94b0c2', '#566c86', '#333c57',
+  '#f2a7a0', // g (16) rosa pelle, solo per la pelle di Tony
 ];
 
-// Tony: testa 16x17 (ciuffo + faccia sorridente), come in src/gfx/sprites.ts
+// Tony operaio: testa 16x17 (caschetto giallo + faccia sorridente, pelle
+// già convertita: SKIN_BASE g, SKIN_SHADE 3), come 'tony-head' in src/gfx/sprites.ts
 const TONY_HEAD = [
-  '.....1..1..1....',
-  '......1.1.1.....',
-  '....00000000....',
-  '..003333333300..',
-  '.03333333333330.',
-  '.033e3e3e3e3330.',
-  '0333333333333330',
-  '0330003333000330',
-  '0330c033330c0330',
-  '0330003333000330',
-  '0322333333332230',
-  '0333303333033330',
-  '0333330000333330',
-  '0333333333333330',
-  '.03333333333330.',
-  '..003333333300..',
+  '.....000000.....',
+  '...004c444300...',
+  '..04c444444430..',
+  '.04c44444444330.',
+  '.04444444444330.',
+  '0444444444444330',
+  '0000000000000000',
+  '03gggggggggggg30',
+  '0ggc0gggggg0cgg0',
+  '0ggc0gggggg0cgg0',
+  '0g33gggggggg33g0',
+  '0gggg0gggg0gggg0',
+  '0ggggg0000ggggg0',
+  '0gggggggggggggg0',
+  '.0ggggggggggg30.',
+  '..00gggggg3300..',
   '....00000000....',
 ];
 
@@ -65,7 +67,7 @@ function buildGrid() {
   const oy = Math.floor((GRID - TONY_HEAD.length) / 2);
   TONY_HEAD.forEach((row, y) => {
     [...row].forEach((ch, x) => {
-      if (ch !== '.') g[oy + y][ox + x] = parseInt(ch, 16);
+      if (ch !== '.') g[oy + y][ox + x] = ch === 'g' ? 16 : parseInt(ch, 16);
     });
   });
   return g;

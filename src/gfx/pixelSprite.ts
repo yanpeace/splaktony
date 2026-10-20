@@ -3,7 +3,8 @@ import { hex } from '../config/palette';
 
 /**
  * Uno sprite è un array di righe; ogni carattere è un indice esadecimale
- * della palette (0-f), '.' o ' ' = trasparente. Tutte le righe devono avere
+ * della palette (0-f), oppure 'g' = 16 (rosa pelle, solo per la pelle);
+ * '.' o ' ' = trasparente. Tutte le righe devono avere
  * la stessa lunghezza.
  *
  *   const COIN: SpriteData = [
@@ -20,6 +21,7 @@ export type SpriteData = readonly string[];
 /** Indice di palette di un carattere, oppure -1 se trasparente. */
 export function paletteIndexOf(ch: string): number {
   if (ch === '.' || ch === ' ') return -1;
+  if (ch === 'g') return 16;
   const n = parseInt(ch, 16);
   if (Number.isNaN(n)) throw new Error(`pixelSprite: carattere non valido "${ch}"`);
   return n;

@@ -5,8 +5,8 @@ import { playCoin, playHit, playSqueak, playWhoosh } from '../audio/sfx';
 import { damageColor, damageNumber, hitStop, shake, spawnParticles } from '../gfx/effects';
 import { Subscriptions } from './events';
 
-/** colori dei pezzetti che volano via: stoffa di Tony + imbottitura */
-const FABRIC = [C.orange, C.orange, C.red, C.white, C.white, C.silver] as const;
+/** colori dei pezzetti che volano via: pettorina gialla, jeans, maglietta, pelle, bande riflettenti */
+const FABRIC = [C.yellow, C.yellow, C.blue, C.blue, C.black, C.charcoal, C.pink, C.silver] as const;
 
 /**
  * Feedback dei colpi: ascolta gli eventi e chiama effects/sfx.
