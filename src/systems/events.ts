@@ -73,6 +73,12 @@ export interface GameEvents {
   'spritz:done': { reward: number };
   /** impostazioni cambiate (UI → sfx, save) */
   'settings:changed': { muted: boolean };
+  /**
+   * altezza logica o margini sicuri cambiati (finestra ridimensionata, barre di
+   * Safari, rotazione): SCREEN è già aggiornato e il gioco ridimensionato.
+   * Emesso da systems/screenWatch.ts → le scene si ricostruiscono (bindRelayout)
+   */
+  'screen:changed': { height: number; safeTop: number; safeBottom: number };
 }
 
 export type EventName = keyof GameEvents;

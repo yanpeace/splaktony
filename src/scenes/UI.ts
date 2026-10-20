@@ -6,6 +6,7 @@ import { formatCompact, measureText, pixelText, setPixelText } from '../gfx/pixe
 import { ArcadeButton, drawPanel } from '../gfx/ui';
 import { events, Subscriptions } from '../systems/events';
 import { getSave } from '../systems/save';
+import { bindRelayout } from '../systems/screenWatch';
 import type { Game } from './Game';
 import { alignButtonHit } from './Shop';
 
@@ -183,6 +184,8 @@ export class UI extends Phaser.Scene {
     });
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.subs.clear());
+    // schermo cambiato: HUD rifatta con le misure nuove (addormentata durante SPRITZ: al risveglio)
+    bindRelayout(this, () => this.scene.restart());
   }
 }
 

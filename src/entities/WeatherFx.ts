@@ -73,8 +73,6 @@ const DEBRIS_KINDS = [
 const BOLT_KEYS = ['wx-bolt-0', 'wx-bolt-1', 'wx-bolt-2'];
 const BOLT_W = 25;
 const BOLT_H = 92;
-/** partenza di fiocchi e gocce: sotto il tubo dell'HUD, che sugli schermi lunghi sale (la saetta resta sullo sfondo) */
-const SPAWN_Y = W.spawnY + TOP_SHIFT;
 
 /** Saetta a zig-zag (pixel interi): nucleo bianco, bordo ciano, un ramo. */
 function boltSprite(): string[] {
@@ -377,7 +375,8 @@ export class WeatherFx {
     const snowTarget = Math.round(W.snowMax * lv.snow);
     const rainTarget = Math.round(lv.rainMax * lv.rain);
     let budget: number = W.spawnPerFrame;
-    const top = SPAWN_Y;
+    // partenza di fiocchi e gocce: sotto il tubo dell'HUD, che sugli schermi lunghi sale (TOP_SHIFT segue lo schermo)
+    const top = W.spawnY + TOP_SHIFT;
     while (budget > 0 && this.liveSnow < snowTarget) {
       const d = this.acquire('snow');
       if (!d) break;

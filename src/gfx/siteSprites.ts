@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { SCREEN } from '../config/balance';
-import { makeSprites, spriteSize, type SpriteData } from './pixelSprite';
+import { makeSprite, makeSprites, spriteSize, type SpriteData } from './pixelSprite';
 import { roadAtY, scaleAtY, TUNNEL } from '../entities/siteLayout';
 
 /**
@@ -900,7 +900,6 @@ function pipe(): SpriteData {
 
 export const SITE_SPRITES: Record<string, SpriteData> = {
   'site-sky': sky(),
-  'site-sky-top': skyTop(SCREEN.extra),
   'site-cloud-a': cloud(26, 10, [
     [7, 6, 4.5],
     [14, 4.5, 5],
@@ -937,4 +936,12 @@ export const SITE_SPRITES: Record<string, SpriteData> = {
 /** Crea le texture del cantiere (idempotente: le chiavi esistenti vengono saltate). */
 export function registerSiteSprites(scene: Phaser.Scene): void {
   makeSprites(scene, SITE_SPRITES);
+}
+
+/**
+ * Texture del cielo sopra lo 0 per l'altezza attuale (SCREEN.extra righe):
+ * una chiave per altezza, così dopo un cambio di schermo si crea quella nuova.
+ */
+export function siteSkyTopKey(scene: Phaser.Scene): string {
+  return makeSprite(scene, `site-sky-top-${SCREEN.extra}`, skyTop(SCREEN.extra));
 }

@@ -5,6 +5,7 @@ import { ensurePixelFont, pixelText, setPixelText } from '../gfx/pixelFont';
 import { ArcadeButton, drawPanel } from '../gfx/ui';
 import { events, Subscriptions } from '../systems/events';
 import { getSave } from '../systems/save';
+import { bindRelayout } from '../systems/screenWatch';
 
 /**
  * Impostazioni: audio (via evento 'settings:changed', lo salva save.ts),
@@ -109,8 +110,9 @@ interface Toggle {
   set(on: boolean): void;
 }
 
-/** riquadro centrato in verticale anche sugli schermi lunghi */
-const PANEL = { x: 18, y: 64 + Math.round(SCREEN.extra / 2), w: 144, h: 168 } as const;
+/** riquadro centrato in verticale anche sugli schermi lunghi (y ricalcolata a ogni create) */
+const PANEL = { x: 18, y: 64, w: 144, h: 168 };
+const PANEL_BASE_Y = 64;
 
 export class Settings extends Phaser.Scene {
   private subs = new Subscriptions();
@@ -125,6 +127,7 @@ export class Settings extends Phaser.Scene {
   }
 
   create(): void {
+    PANEL.y = PANEL_BASE_Y + Math.round(SCREEN.extra / 2);
     if (this.from) this.scene.get(this.from).input.enabled = false;
 
     // fondo che oscura e blocca i tocchi sulla scena sotto
@@ -187,6 +190,8 @@ export class Settings extends Phaser.Scene {
       this.subs.clear();
       if (this.from && this.scene.manager.isActive(this.from)) this.scene.get(this.from).input.enabled = true;
     });
+    // schermo cambiato: pannello rifatto con le misure nuove
+    bindRelayout(this, () => this.scene.restart({ from: this.from ?? undefined } satisfies SettingsData));
   }
 
   private close(): void {

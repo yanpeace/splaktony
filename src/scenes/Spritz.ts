@@ -17,11 +17,14 @@ import { ArcadeButton, drawPanel } from '../gfx/ui';
 import { economy } from '../systems/economy';
 import { events, type WorldId } from '../systems/events';
 import { getSave } from '../systems/save';
+import { bindRelayout } from '../systems/screenWatch';
 import { alignButtonHit } from './Shop';
 
 /** Dati di avvio: scene.launch('Spritz', { world }). */
 export interface SpritzData {
   world?: WorldId;
+  /** ricostruzione dopo un cambio di schermo: si riparte senza ingresso, col timer dov'era */
+  resume?: { timeLeft: number; timedOut: boolean };
 }
 
 interface Drop {
@@ -77,23 +80,32 @@ interface FloatText {
 const W = SCREEN.width;
 /** layout di base 180x320: la camera è ancorata in basso, sugli schermi lunghi la vista continua sopra (y < 0) */
 const H = SCREEN.baseHeight;
-/** riga in alto della barra: bordo alto dello schermo + notch */
-const HUD_Y = SCREEN.top + SCREEN.safeTop;
+/** riga in alto della barra: bordo alto dello schermo + notch (ricalcolata a ogni create: lo schermo cambia dal vivo) */
+let HUD_Y = 0;
 /** punto del dito → mondo (camera spostata) */
 const tmpPoint = new Phaser.Math.Vector2();
 const COAT_KEY = 'sz-coat';
 /** profondità degli oggetti della scena */
 const D = { view: 0, chunk: 1, coat: 2, flash: 3, drip: 4, drop: 6, lance: 20, reticle: 21, hud: 30, text: 40, banner: 50, party: 60, screenFlash: 90, wipe: 1000 } as const;
 /** impaginazione HUD (pixel interi): barra ancorata in alto (HUD_Y), riquadri in basso sopra l'indicatore home */
-const BAR = { x: 58, y: HUD_Y + 13, w: 82, h: 8 } as const;
+const BAR = { x: 58, y: 0, w: 82, h: 8 };
 /** riga alta dei riquadri in basso (manometro, timer, premio) */
-const HUD_BOTTOM_Y = H - 24 - SCREEN.safeBottom;
+let HUD_BOTTOM_Y = H - 24;
 const GAUGE = { x: 3, w: 57, h: 21 } as const;
 const TIMER = { x: 62, w: 56, h: 21 } as const;
 const PRIZE = { x: 120, w: 57, h: 21 } as const;
 /** striscione dei traguardi / tempo scaduto e scritta della combo (sotto la barra in alto) */
-const BANNER = { y: HUD_Y + 50, h: 40 } as const;
-const COMBO_Y = HUD_Y + 31;
+const BANNER = { y: 0, h: 40 };
+let COMBO_Y = 0;
+
+/** Impaginazione HUD dallo schermo attuale (SCREEN cambia dal vivo: si rifà a ogni create). */
+function layoutHud(): void {
+  HUD_Y = SCREEN.top + SCREEN.safeTop;
+  BAR.y = HUD_Y + 13;
+  HUD_BOTTOM_Y = H - 24 - SCREEN.safeBottom;
+  BANNER.y = HUD_Y + 50;
+  COMBO_Y = HUD_Y + 31;
+}
 /** colori delle parole delle zone, a giro con la combo */
 const WORD_COLORS = [C.lime, C.yellow, C.orange, C.cyan, C.white] as const;
 /** colori di coriandoli e fuochi */
@@ -167,6 +179,10 @@ export class Spritz extends Phaser.Scene {
   private ready = false;
   private finished = false;
   private exiting = false;
+  /** true mentre la scena si ricostruisce per un cambio di schermo: lo shutdown non sveglia il gioco sotto */
+  private relayingOut = false;
+  /** texture dello sfondo per l'altezza attuale */
+  private viewKey = '';
   private sprayId = -1;
   private targetX = 90;
   private targetY = 110;
@@ -226,6 +242,8 @@ export class Spritz extends Phaser.Scene {
   }
 
   create(data: SpritzData = {}): void {
+    layoutHud();
+    this.hudY = HUD_BOTTOM_Y;
     this.world = data.world === 3 ? 3 : 2;
     this.ready = false;
     this.finished = false;
@@ -268,12 +286,19 @@ export class Spritz extends Phaser.Scene {
     anchorBottom(this);
 
     this.scene.pause('Game');
-    registerSpritzSprites(this);
+    this.viewKey = registerSpritzSprites(this);
 
     // la stessa parete (volte completato + mondo) si ricostruisce sempre uguale
     const sp = getSave().spritz;
     this.layout = buildWallLayout(sp.completed * 3 + this.world);
     this.reward = spritzReward(sp.completed, this.world);
+    const resume = data.resume;
+    if (resume) {
+      this.timeLeft = Math.max(0, resume.timeLeft);
+      this.timedOut = resume.timedOut;
+      if (this.timedOut) this.reward = 0;
+      this.timerWarned = !this.timedOut && this.timeLeft <= SPRITZ.timerWarnMs;
+    }
     this.buildView();
     this.buildHud();
     this.restore(sp.percent);
@@ -288,10 +313,26 @@ export class Spritz extends Phaser.Scene {
 
     this.time.addEvent({ delay: SPRITZ.saveEveryMs, loop: true, callback: () => this.emitProgress() });
 
+    // schermo cambiato (barre di Safari, rotazione...): si salva e si riparte
+    // subito, senza tendine né salita, col timer dov'era (non durante ingresso,
+    // uscita o festa: aspetta il primo momento buono)
+    this.relayingOut = false;
+    bindRelayout(
+      this,
+      () => {
+        this.emitProgress();
+        this.relayingOut = true;
+        this.scene.restart({ world: this.world, resume: { timeLeft: this.timeLeft, timedOut: this.timedOut } } satisfies SpritzData);
+      },
+      () => this.ready && !this.finished && !this.exiting,
+    );
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      // in ogni caso il gioco sotto non resta in pausa né senza HUD
-      if (this.scene.isPaused('Game')) this.scene.resume('Game');
-      for (const k of ['UI', 'ProgressHUD']) if (this.scene.isSleeping(k)) this.scene.wake(k);
+      // in ogni caso il gioco sotto non resta in pausa né senza HUD (tranne se si ricostruisce)
+      if (!this.relayingOut) {
+        if (this.scene.isPaused('Game')) this.scene.resume('Game');
+        for (const k of ['UI', 'ProgressHUD']) if (this.scene.isSleeping(k)) this.scene.wake(k);
+      }
       for (const c of this.coins) releaseImage(c.img);
       this.coins = [];
       this.input.off(Phaser.Input.Events.POINTER_DOWN, this.onDown, this);
@@ -300,14 +341,15 @@ export class Spritz extends Phaser.Scene {
       this.input.off(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.onUp, this);
     });
 
-    this.enter();
+    if (resume) this.enterNow();
+    else this.enter();
   }
 
   // ---------------------------------------------------------------- costruzione
 
   private buildView(): void {
     const v = this.viewObjs;
-    v.push(this.add.image(0, SCREEN.top, 'sz-view').setOrigin(0).setDepth(D.view));
+    v.push(this.add.image(0, SCREEN.top, this.viewKey).setOrigin(0).setDepth(D.view));
     for (const c of this.layout.chunks) v.push(this.add.image(c.x, c.y, c.key).setDepth(D.chunk));
 
     // cemento: una canvas a schermo pieno, scritta a pixel e caricata al massimo una volta per frame
@@ -503,6 +545,18 @@ export class Spritz extends Phaser.Scene {
         },
       });
     });
+  }
+
+  /** Dopo una ricostruzione (cambio di schermo): tutto visibile e pronto, UI e ProgressHUD restano addormentate. */
+  private enterNow(): void {
+    this.wipeTop.height = 0;
+    this.wipeBottom.height = 0;
+    this.cameras.main.setZoom(1).setOrigin(0.5);
+    this.setVisible(this.viewObjs, true);
+    this.setVisible(this.hudObjs, true);
+    this.hudShown = true;
+    this.applyPrizeVisibility();
+    this.ready = true;
   }
 
   /** ESCI (o fine della festa): salva, tendine, gioco ripreso, scena ferma. */

@@ -311,10 +311,16 @@ export const SPRITZ_SPRITES = {
 
 export const SPLAT_FRAMES = ['sz-splat-0', 'sz-splat-1', 'sz-splat-2'] as const;
 
-/** Crea (una volta) tutte le texture del minigioco; lo sfondo costa ~20 ms solo la prima volta. */
-export function registerSpritzSprites(scene: Phaser.Scene): void {
+/**
+ * Crea (una volta) tutte le texture del minigioco; lo sfondo costa ~20 ms solo
+ * la prima volta per ogni altezza di schermo. Ritorna la chiave dello sfondo
+ * (`sz-view<-top>`: dopo un cambio di schermo se ne crea uno nuovo).
+ */
+export function registerSpritzSprites(scene: Phaser.Scene): string {
   makeSprites(scene, SPRITZ_SPRITES);
-  if (!scene.textures.exists('sz-view')) makeIndexTexture(scene, 'sz-view', buildView());
+  const key = `sz-view${-SCREEN.top}`;
+  if (!scene.textures.exists(key)) makeIndexTexture(scene, key, buildView());
+  return key;
 }
 
 // ---------------------------------------------------------------- griglia di copertura

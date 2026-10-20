@@ -3,7 +3,7 @@
  * Unità: pixel logici (layout di base 180x320, vedi SCREEN), millisecondi,
  * velocità in px/step (la fisica avanza a step fissi di 1/60 s).
  */
-import { computeScreen } from './screen';
+import { applyScreen, measureScreen, type ScreenSize } from './screen';
 
 /**
  * Risoluzione logica: larghezza 180, altezza dal rapporto dello schermo
@@ -14,19 +14,53 @@ export const SCREEN_FIT = {
   width: 180,
   baseHeight: 320,
   maxHeight: 420,
-  /** margine sicuro massimo (notch / indicatore home), px logici */
-  maxSafe: 16,
+  /** margine sicuro massimo (notch / Dynamic Island / indicatore home), px logici */
+  maxSafe: 28,
 } as const;
 
-/** { width, height, baseHeight, extra, top, safeTop, safeBottom }, calcolato una volta all'avvio. */
-export const SCREEN = computeScreen(SCREEN_FIT);
+/**
+ * Margini di riserva per iPhone (px CSS) quando la pagina sta sotto la barra
+ * di stato ma env(safe-area-inset-*) dice 0 (vedi config/screen.ts).
+ */
+export const SAFE_FALLBACK = {
+  /** 14 Pro / 15 / 16 / 17 (schermi da 852 px CSS in su): Dynamic Island */
+  islandMinH: 852,
+  island: 59,
+  /** X .. 14 (812..844 px): notch */
+  notchMinH: 812,
+  notch: 47,
+  /** SE / 8 e precedenti: solo la barra di stato */
+  legacy: 20,
+  /** indicatore Home */
+  bottom: 34,
+  /** Safari di iOS 26: la pagina va fino al bordo alto anche fuori dall'app da Home */
+  edgeToEdgeIos: 26,
+} as const;
+
+/** Rimisura dal vivo dello schermo (systems/screenWatch.ts). */
+export const SCREEN_WATCH = {
+  /** attesa dopo l'ultimo resize prima di rimisurare */
+  debounceMs: 150,
+  /** controlli extra subito dopo l'avvio (barre di Safari / app da Home che si assestano) */
+  bootChecksMs: [100, 500, 1500, 3000],
+  /** controllo periodico di sicurezza (costa una getBoundingClientRect) */
+  pollMs: 1000,
+} as const;
+
+/**
+ * { width, height, baseHeight, extra, top, safeTop, safeBottom }: misurato
+ * all'avvio e aggiornato SUL POSTO da refreshScreen() quando la finestra
+ * cambia. Leggilo quando costruisci la scena, non in costanti di modulo.
+ */
+export const SCREEN: ScreenSize = measureScreen(SCREEN_FIT, SAFE_FALLBACK);
 
 /**
  * Di quanto sale il bordo alto della stanza (soffitto, tubo sotto l'HUD)
  * rispetto al layout di base: <= 0. Le righe in più diventano stanza, meno
- * il margine del notch che spinge giù l'HUD.
+ * il margine del notch che spinge giù l'HUD. `let` esportato: chi lo importa
+ * vede sempre il valore aggiornato da refreshScreen().
  */
-export const TOP_SHIFT = SCREEN.top + SCREEN.safeTop;
+export let TOP_SHIFT = SCREEN.top + SCREEN.safeTop;
 
 /** Stanza chiusa: spessori visibili di muri, soffitto e pavimento. */
 export const ROOM = {
@@ -39,13 +73,24 @@ export const ROOM = {
   restitution: 0.25,
 } as const;
 
-/** Rettangolo interno giocabile, derivato da ROOM. */
-export const ROOM_INNER = {
+/** Rettangolo interno giocabile, derivato da ROOM (top segue TOP_SHIFT). */
+export const ROOM_INNER: { readonly left: number; readonly right: number; top: number; readonly bottom: number } = {
   left: ROOM.wall,
   right: SCREEN.width - ROOM.wall,
   top: ROOM.ceiling + TOP_SHIFT,
   bottom: SCREEN.baseHeight - ROOM.floor,
-} as const;
+};
+
+/**
+ * Rimisura lo schermo e aggiorna sul posto SCREEN, TOP_SHIFT e ROOM_INNER.top.
+ * Ritorna true se altezza o margini sicuri sono cambiati davvero.
+ */
+export function refreshScreen(): boolean {
+  if (!applyScreen(SCREEN, measureScreen(SCREEN_FIT, SAFE_FALLBACK))) return false;
+  TOP_SHIFT = SCREEN.top + SCREEN.safeTop;
+  ROOM_INNER.top = ROOM.ceiling + TOP_SHIFT;
+  return true;
+}
 
 export const PHYSICS = {
   gravityY: 1,

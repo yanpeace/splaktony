@@ -16,6 +16,7 @@ import { dealDamage } from '../systems/damage';
 import { events, Subscriptions, type WorldId } from '../systems/events';
 import { bindHitFeedback } from '../systems/feedback';
 import { getSave } from '../systems/save';
+import { bindRelayout } from '../systems/screenWatch';
 import { installUpgrades } from '../systems/upgrades';
 import { bindWeather } from '../systems/weather';
 import { WEAPON_REGISTRY } from '../weapons/registry';
@@ -35,13 +36,14 @@ export interface GameData {
   intro?: boolean;
   /** mondo in cui porta l'intro (2 = default, 3 = galleria profonda) */
   introTo?: WorldId;
+  /** attesa dell'intro (default WORLDS.introDelayMs): dopo una ricostruzione riparte da dov'era */
+  introDelayMs?: number;
+  /** ricostruzione per un cambio di schermo: niente zoom d'arrivo né cartello dei metri */
+  relayout?: boolean;
 }
 
 /** Punto del mondo → frazione dello schermo (la camera è ancorata in basso: y 0 = riga SCREEN.extra). */
 const screenFrac = (x: number, y: number) => ({ x: x / SCREEN.width, y: (y - SCREEN.top) / SCREEN.height });
-
-/** Punto (frazione dello schermo) attorno a cui zooma la camera: la bocca della galleria. */
-const ZOOM_FOCUS = screenFrac(TUNNEL.x, TUNNEL.y - TUNNEL.h / 2);
 
 /** I puntatori touch extra si aggiungono una volta sola (l'InputManager è globale). */
 let pointersAdded = false;
@@ -73,6 +75,11 @@ export class Game extends Phaser.Scene {
   private subs = new Subscriptions();
   private worldId: WorldId = 1;
   private transitioning = false;
+  /** intro in attesa (auto non ancora partita): mondo di arrivo e quando parte */
+  private introTo: WorldId | null = null;
+  private introAt = 0;
+  /** l'auto sta salendo verso la galleria: niente ricostruzioni fino al passaggio */
+  private driving = false;
 
   constructor() {
     super('Game');
@@ -84,6 +91,8 @@ export class Game extends Phaser.Scene {
     this.weapons.clear();
     this.worldId = data.world === 2 || data.world === 3 ? data.world : 1;
     this.transitioning = false;
+    this.introTo = null;
+    this.driving = false;
     this.input.enabled = true;
     if (!pointersAdded) {
       pointersAdded = true;
@@ -141,11 +150,36 @@ export class Game extends Phaser.Scene {
     this.scene.launch('ProgressHUD');
 
     if (intro) {
+      const delay = Math.max(0, data.introDelayMs ?? WORLDS.introDelayMs);
+      this.introTo = introTo;
+      this.introAt = this.time.now + delay;
       // lo sfondo della galleria (~60 ms, poi in cache) si prepara durante l'attesa, non allo zoom
-      this.time.delayedCall(1000, () => tunnelBackdrop(introTo));
-      this.time.delayedCall(WORLDS.introDelayMs, () => driveIntoTunnel(this, () => this.enterTunnel(introTo)));
+      this.time.delayedCall(Math.min(1000, delay), () => tunnelBackdrop(introTo));
+      this.time.delayedCall(delay, () => {
+        this.introTo = null;
+        this.driving = true;
+        driveIntoTunnel(this, () => this.enterTunnel(introTo));
+      });
     }
-    if (this.worldId !== 1) this.arriveInTunnel();
+    if (this.worldId !== 1 && !data.relayout) this.arriveInTunnel();
+
+    // schermo cambiato (barre di Safari, rotazione...): si ricostruisce lo stesso
+    // mondo senza intro; durante l'attesa dell'intro si riparte col tempo che
+    // restava, mentre l'auto sale e durante il passaggio si aspetta (il restart
+    // del passaggio usa già le misure nuove)
+    bindRelayout(
+      this,
+      () => {
+        const next: GameData = { world: this.worldId, relayout: true };
+        if (this.introTo !== null) {
+          next.intro = true;
+          next.introTo = this.introTo;
+          next.introDelayMs = Math.max(0, this.introAt - this.time.now);
+        }
+        this.scene.restart(next);
+      },
+      () => !this.transitioning && !this.driving,
+    );
   }
 
   get world(): WorldId {
@@ -165,7 +199,9 @@ export class Game extends Phaser.Scene {
     this.scene.setVisible(false, 'UI');
     this.scene.setVisible(false, 'ProgressHUD');
     const cam = this.cameras.main;
-    cam.setOrigin(ZOOM_FOCUS.x, ZOOM_FOCUS.y);
+    // punto (frazione dello schermo) attorno a cui zooma la camera: la bocca della galleria
+    const focus = screenFrac(TUNNEL.x, TUNNEL.y - TUNNEL.h / 2);
+    cam.setOrigin(focus.x, focus.y);
     this.stepZoom(WORLDS.zoomIn, () => {
       const black = PALETTE_INT[C.black];
       cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.restart({ world: target } satisfies GameData));

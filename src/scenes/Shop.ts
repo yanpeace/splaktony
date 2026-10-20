@@ -9,6 +9,7 @@ import { ArcadeButton, drawPanel } from '../gfx/ui';
 import { buyWeapon, economy, isWeaponOwned, upgradeWeapon, weaponLevel } from '../systems/economy';
 import { events, Subscriptions } from '../systems/events';
 import { upgradeCost, weaponPrice } from '../systems/upgrades';
+import { bindRelayout } from '../systems/screenWatch';
 import { WEAPON_REGISTRY, type WeaponEntry } from '../weapons/registry';
 import type { WeaponContext } from '../weapons/Weapon';
 
@@ -70,17 +71,29 @@ const ROW_X = 3;
 const ROW_W = SCREEN.width - 6;
 const ROW_H = 40;
 const ROW_GAP = 2;
-/** riga in alto sotto il notch; il piede si ancora al bordo basso dello schermo */
-const HEAD_Y = SCREEN.safeTop + 3;
-const LIST_Y = HEAD_Y + 17;
 const ICON_BOX = 24;
 const UP_W = 52;
 const UP_H = 14;
-const FOOT_Y = SCREEN.height - SCREEN.safeBottom - 20;
-const TOAST_Y = FOOT_Y - 24;
-const PAGE_Y = FOOT_Y - 12;
+/**
+ * Righe verticali dallo schermo attuale (SCREEN cambia dal vivo: layoutShop()
+ * a ogni create). In alto sotto il notch; il piede si ancora al bordo basso.
+ */
+let HEAD_Y = 0;
+let LIST_Y = 0;
+let FOOT_Y = 0;
+let TOAST_Y = 0;
+let PAGE_Y = 0;
 /** righe per pagina: quante ne entrano tra intestazione e piede (6 su 180x320, di più sugli schermi lunghi) */
-const PER_PAGE = Math.max(6, Math.floor((TOAST_Y - 3 - LIST_Y + ROW_GAP) / (ROW_H + ROW_GAP)));
+let PER_PAGE = 6;
+
+function layoutShop(): void {
+  HEAD_Y = SCREEN.safeTop + 3;
+  LIST_Y = HEAD_Y + 17;
+  FOOT_Y = SCREEN.height - SCREEN.safeBottom - 20;
+  TOAST_Y = FOOT_Y - 24;
+  PAGE_Y = FOOT_Y - 12;
+  PER_PAGE = Math.max(6, Math.floor((TOAST_Y - 3 - LIST_Y + ROW_GAP) / (ROW_H + ROW_GAP)));
+}
 
 /**
  * Allinea l'area di tocco di un ArcadeButton al riquadro disegnato.
@@ -124,6 +137,7 @@ export class Shop extends Phaser.Scene {
   }
 
   create(): void {
+    layoutShop();
     this.pageObjs = [];
     this.dirty = true;
     this.affordSig = '';
@@ -208,6 +222,8 @@ export class Shop extends Phaser.Scene {
       this.subs.clear();
       this.toastTimer?.remove();
     });
+    // schermo cambiato: negozio rifatto con le misure nuove (righe per pagina comprese)
+    bindRelayout(this, () => this.scene.restart());
     this.renderPage();
   }
 
