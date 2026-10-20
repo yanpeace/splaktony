@@ -265,9 +265,9 @@ export const WEAPON_STATS = {
     pushStrength: 13,
     /** spinta extra verso l'alto a tutto Tony (px/step, scalata dalla vicinanza) */
     upBoost: 3,
-    /** raggio dello sprite dell'esplosione (px) */
-    boomSize: 14,
-    shakePx: 3,
+    /** raggio della palla di fuoco (px, vedi weapons/explosionFx.ts) */
+    boomSize: 20,
+    shakePx: 4,
   },
   dinamite: {
     price: 0, // prezzo in SHOP.prices
@@ -278,8 +278,8 @@ export const WEAPON_STATS = {
     pushRadius: 66,
     pushStrength: 18,
     upBoost: 4,
-    boomSize: 21,
-    shakePx: 4,
+    boomSize: 28,
+    shakePx: 6,
   },
   // ---- ARMI NUOVE: mischia iconica ----
   piedediporco: {
@@ -542,20 +542,14 @@ export const EXPLOSIVES = {
   maxLive: 3,
   /** quota minima di danno al bordo del raggio (0..1) */
   minDamageShare: 0.25,
-  explosionFrameMs: 70,
-  hitStopMs: 45,
-  shakeMs: 320,
-  /** sbuffi di fumo per esplosione e loro durata */
-  smokePuffs: 7,
-  smokeMs: 1300,
-  smokeRise: 18,
-  debrisCount: 16,
+  hitStopMs: 50,
+  shakeMs: 460,
   /** granata: lampeggio della spoletta (ms per fase, dall'inizio alla fine) */
   blinkSlowMs: 260,
-  blinkFastMs: 50,
+  blinkFastMs: 45,
   /** dinamite: lunghezza massima della miccia (px) e ogni quanto scintilla */
   fuseLength: 4,
-  sparkEveryMs: 45,
+  sparkEveryMs: 40,
 } as const;
 
 // ---- FEATURE D: negozio ----
@@ -1394,4 +1388,84 @@ export const ANIM_MELEE = {
   fanSpread: 0.16,
   /** danno delle stelle laterali del ventaglio (frazione) */
   fanSideDamage: 0.5,
+} as const;
+
+// ---- ANIMAZIONI: esplosivi ----
+/**
+ * Esplosione riusabile (weapons/explosionFx.ts: bigExplosion). Durate in ms
+ * del clock dell'effetto (si ferma durante l'hit-stop, segue time.timeScale).
+ */
+export const EXPLOSION_FX = {
+  /** durata di ciascun frame della palla di fuoco (bianco→giallo→arancio→rosso→fumo) */
+  fireballFrameMs: [45, 55, 65, 75, 95, 120],
+  /** raggio relativo di ogni frame rispetto a size */
+  fireballScale: [0.7, 0.95, 1.05, 1.1, 1.12, 1.18],
+  /** salita della palla di fuoco a ogni frame (px per 10 px di size) */
+  fireballRise: [0, 0, 1, 2, 3.5, 5.5],
+  /** onda d'urto: raggio relativo e durata dei 4 frame dell'anello */
+  ringScale: [0.95, 1.55, 2.15, 2.7],
+  ringFrameMs: [40, 45, 55, 70],
+  /** flash bianco a tutto schermo (1 frame) e tint arancio dello sfondo (frame) */
+  flashAlpha: 0.75,
+  tintAlpha: 0.32,
+  tintFrames: 2,
+  /** schegge che rimbalzano (per size 10) e tetto globale */
+  debrisPer10: 5,
+  maxDebris: 48,
+  debrisSpeed: 4.2,
+  debrisGravity: 0.2,
+  debrisBounce: 0.45,
+  debrisLifeMs: [1400, 2600],
+  /** dopo quanto un pezzo incandescente diventa scuro */
+  debrisCoolMs: 380,
+  /** ms per scatto di 90 gradi a velocità 1 px/step */
+  debrisSpinMs: 160,
+  /** scintille veloci (particelle 1x1/2x2) per size 10 */
+  sparksPer10: 9,
+  sparkSpeed: 5,
+  /** colonna di fumo: sbuffi per size 10, tetto, emissione, durata, salita */
+  smokePer10: 7,
+  maxSmoke: 48,
+  smokeSpawnMs: 520,
+  smokeLifeMs: [1700, 2800],
+  smokeRiseSpeed: 0.7,
+  smokeSpread: 0.3,
+  /** segno di bruciatura: se l'esplosione è entro size*k dal pavimento */
+  scorchNearFloor: 1.1,
+  scorchMs: 4200,
+  maxScorch: 4,
+  /** terra che schizza dal pavimento (particelle per size 10) */
+  dirtPer10: 7,
+  /** spinta agli effetti leggeri già a terra (schegge, fumo) entro size*k */
+  jiggleRange: 4,
+  jiggleKick: 2.6,
+} as const;
+
+/** Mira e volo di granata/dinamite (mano, spoletta, fiammifero, scia, beep). */
+export const EXPLOSIVE_ANIM = {
+  /** guanto: tremolio a fionda tesa (oltre questa quota di maxPull) */
+  tenseShare: 0.85,
+  tenseJitterMs: 50,
+  /** lancio: frame della mano che si apre e accompagna il tiro */
+  throwFrameMs: 45,
+  throwFrames: 3,
+  /** spoletta che vola via */
+  pinVx: 1.4,
+  pinVy: -3.2,
+  /** fiammifero: sfregamento → fiamma → miccia accesa (ms) */
+  matchStrikeMs: 90,
+  matchFlameMs: 170,
+  /** traiettoria: puntini gialli per la prima quota (poi arancio), cerchio tratteggiato */
+  trajBigShare: 0.4,
+  ringDash: 3,
+  ringMarchMs: 80,
+  /** scia in volo (un puntino ogni N ms) */
+  trailEveryMs: 34,
+  trailLifeMs: 200,
+  /** granata: ultimi istanti con flash bianco pieno a ogni lampeggio */
+  blinkWhiteShare: 0.8,
+  beepFrom: 1300,
+  beepTo: 2600,
+  /** dinamite: sfrigolio della miccia */
+  sizzleEveryMs: 85,
 } as const;
