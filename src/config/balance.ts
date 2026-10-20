@@ -252,6 +252,90 @@ export const WEAPON_STATS = {
     boomSize: 21,
     shakePx: 4,
   },
+  // ---- ARMI NUOVE: elementali ----
+  lanciafiamme: {
+    price: 0, // prezzo in SHOP.prices
+    /** danno a ogni tick del getto, per ogni parte nel cono */
+    damage: 3.5,
+    /** ms tra due tick di danno del getto mentre il dito è giù */
+    cooldownMs: 120,
+    /** parti colpite al massimo per tick (le più vicine al dito) */
+    maxParts: 3,
+    /** semi-ampiezza del cono (rad) e margine laterale (px) */
+    coneHalf: 0.26,
+    coneMargin: 4,
+    /** gittata massima del getto (px) */
+    range: 260,
+    /** spinta del getto sulla parte colpita (px/step) */
+    push: 0.45,
+    /** durata del fuoco su una parte, tick del danno nel tempo, quota del danno per tick */
+    burnMs: 2600,
+    burnTickMs: 300,
+    burnShare: 0.6,
+  },
+  fulmine: {
+    price: 0, // prezzo in SHOP.prices
+    /** danno della saetta sulla prima parte */
+    damage: 36,
+    cooldownMs: 480,
+    /** raggio (px) entro cui la saetta trova la parte più vicina al dito */
+    strikeRadius: 30,
+    /** salti della catena, raggio di ogni salto (px), quota di danno a ogni salto */
+    chainCount: 3,
+    chainRange: 26,
+    chainMult: 0.6,
+    /** spinta verso il basso della saetta (px/step) e tremolio delle parti folgorate */
+    impulse: 4,
+    shiver: 1.2,
+  },
+  ghiaccio: {
+    price: 0, // prezzo in SHOP.prices
+    damage: 15,
+    cooldownMs: 300,
+    impulse: 3,
+    /** colpi ravvicinati per congelare, finestra (ms) tra un colpo e l'altro */
+    hitsToFreeze: 3,
+    comboWindowMs: 1300,
+    /** durata massima del blocco di ghiaccio; prima di minFreezeMs un colpo non lo rompe */
+    freezeMs: 2000,
+    minFreezeMs: 250,
+    /** frantumazione: danno sulla parte colpita = damage * shatterMult, altre parti damage * splashMult */
+    shatterMult: 6,
+    splashMult: 1.5,
+    splashParts: 4,
+    /** spinta radiale della frantumazione (raggio px, forza px/step) */
+    shatterRadius: 50,
+    shatterPush: 9,
+  },
+  tornado: {
+    price: 0, // prezzo in SHOP.prices
+    /** piccolo danno a contatto a ogni tick (parti dentro il vortice) */
+    damage: 8,
+    /** pausa tra due tornado (dalla nascita) */
+    cooldownMs: 3800,
+    lifeMs: 3000,
+    contactTickMs: 250,
+    contactParts: 3,
+    contactRadius: 20,
+    /** orbita di Tony attorno al centro: raggio (px), velocità tangente, risucchio, aderenza */
+    orbitR: 10,
+    spinSpeed: 2.5,
+    suckSpeed: 6,
+    pull: 0.2,
+    grip: 0.25,
+    /** rotazione di Tony su se stesso (rad/step) */
+    tumble: 0.14,
+    /** oscillazione orizzontale del vortice (px, rad/s) e salita (px) */
+    driftAmp: 14,
+    driftFreq: 1.7,
+    rise: 30,
+    /** scagliata finale contro il muro (px/step) */
+    throwSpeed: 17,
+    throwUp: 3,
+    /** danno bonus del primo urto dopo la scagliata = damage * slamMult */
+    slamMult: 75,
+    slamWindowMs: 900,
+  },
 } satisfies Record<string, WeaponStats>;
 
 // ---- FEATURE A: armi da lancio ----
@@ -402,6 +486,11 @@ export const SHOP = {
     mitragliatrice: 3700,
     granata: 9000,
     dinamite: 18000,
+    // ---- ARMI NUOVE: elementali ----
+    lanciafiamme: 7000,
+    fulmine: 11000,
+    ghiaccio: 13000,
+    tornado: 26000,
   } as Record<string, number>,
   /** prezzo per un'arma senza price e non presente in `prices` */
   defaultPrice: 1500,
@@ -792,4 +881,88 @@ export const WEATHER = {
   /** forzato da debug: gocciolio intenso per quanto, e a che ritmo */
   dripBurstMs: 20000,
   dripBurstEveryMs: [150, 450],
+} as const;
+
+// ---- ARMI NUOVE: elementali ----
+/** Costanti di effetti e fisica di lanciafiamme, fulmine, ghiaccio e tornado. */
+export const ELEMENTAL = {
+  /** gravità di Matter in px/step² (gravityY 1 * scala 0.001 * step²) */
+  gravityPerStep: 0.278,
+  // ---- lanciafiamme
+  /** punto di partenza del getto (sotto lo schermo); x segue un po' il dito */
+  flameOriginY: 300,
+  flameOriginFollow: 0.35,
+  /** una fiammella ogni N ms mentre si spara, velocità (px/step) e dispersione (rad) */
+  flameSpawnMs: 7,
+  flameSpeed: 6.5,
+  flameJitter: 0.2,
+  /** fiammelle + fumo vivi al massimo (sotto FX.maxPooledImages: il pool le ricicla tutte) */
+  maxFlames: 88,
+  /** spinta verso l'alto delle fiamme (px/step², negativa = salgono) e attrito */
+  flameBuoyancy: -0.05,
+  flameDrag: 0.97,
+  /** vita extra oltre il dito e vita del fumo (ms) */
+  flameOvershootMs: 160,
+  smokeMs: 420,
+  /** fiammelle attaccate alle parti che bruciano */
+  burnFrameMs: 70,
+  burnSmokeEveryMs: 160,
+  maxBurning: 6,
+  /** annerimento: dura burnMs + charExtraMs */
+  charExtraMs: 1200,
+  /** fruscio del getto: un pezzo di rumore ogni N ms */
+  flameSoundMs: 90,
+  // ---- fulmine
+  /** ritardo nuvola → saetta, durata della nuvola */
+  boltDelayMs: 70,
+  cloudMs: 460,
+  /** la nuvola sta così sopra il punto (px) */
+  cloudLift: 46,
+  /** durata di un frame della saetta e frame totali */
+  boltFrameMs: 45,
+  boltFrames: 3,
+  /** zig-zag: lunghezza dei segmenti e scarto laterale massimo (px) */
+  boltSegment: 7,
+  boltAmp: 4,
+  /** ritardo tra un salto della catena e il successivo */
+  chainDelayMs: 40,
+  /** scheletro visibile e tremolio (ms) */
+  skeletonMs: 170,
+  skeletonBlinkMs: 45,
+  /** lampo a schermo (alpha del primo e del secondo frame) */
+  flashAlpha: 0.22,
+  flashAlpha2: 0.1,
+  shakePx: 2,
+  shakeMs: 160,
+  // ---- ghiaccio
+  /** punto da cui parte il raggio di ghiaccio */
+  beamOriginX: 90,
+  beamOriginY: 300,
+  beamFrameMs: 40,
+  beamFrames: 3,
+  /** caduta lenta del blocco se è in aria (px/step², velocità massima) */
+  iceGravity: 0.06,
+  iceMaxFall: 2.5,
+  /** margine del blocco attorno a Tony (px), crepe dopo questa quota della durata */
+  iceMargin: 2,
+  iceCrackAt: 0.6,
+  /** alpha del riempimento del blocco */
+  iceAlpha: 0.38,
+  maxShards: 18,
+  shardCount: 14,
+  shardMs: 1100,
+  shardGravity: 0.22,
+  shardBounce: 0.4,
+  shakeBigPx: 3,
+  // ---- tornado
+  tornadoFrameMs: 70,
+  debrisCount: 6,
+  /** raggio orizzontale/verticale dell'orbita dei detriti (px) */
+  debrisRx: 13,
+  debrisRy: 4,
+  /** margini del centro del vortice da muri, soffitto e pavimento (px) */
+  tornadoWallMargin: 26,
+  tornadoTopMargin: 40,
+  tornadoBottomMargin: 34,
+  tornadoSoundMs: 220,
 } as const;

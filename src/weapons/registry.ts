@@ -5,6 +5,10 @@ import { Granata } from './Granata';
 import { Punch } from './Punch';
 import { Shuriken } from './Shuriken';
 import { Coltello } from './Coltello';
+import { Lanciafiamme } from './Lanciafiamme';
+import { Fulmine } from './Fulmine';
+import { Ghiaccio } from './Ghiaccio';
+import { Tornado } from './Tornado';
 import type { Weapon, WeaponContext } from './Weapon';
 
 /**
@@ -27,6 +31,10 @@ export const WEAPON_REGISTRY: WeaponEntry[] = [
   { id: 'mitragliatrice', create: (ctx) => new Mitragliatrice(ctx) },
   { id: 'granata', create: (ctx) => new Granata(ctx) },
   { id: 'dinamite', create: (ctx) => new Dinamite(ctx) },
+  { id: 'lanciafiamme', create: (ctx) => new Lanciafiamme(ctx) },
+  { id: 'fulmine', create: (ctx) => new Fulmine(ctx) },
+  { id: 'ghiaccio', create: (ctx) => new Ghiaccio(ctx) },
+  { id: 'tornado', create: (ctx) => new Tornado(ctx) },
 ];
 
 export function findWeapon(id: string): WeaponEntry | undefined {
