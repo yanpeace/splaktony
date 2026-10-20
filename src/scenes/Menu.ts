@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
-import { MENU, MOOD, SCREEN, WORLDS } from '../config/balance';
+import { MENU, MOOD, SCREEN, TOP_SHIFT, WORLDS } from '../config/balance';
 import { C, col, hex, type ColorIndex } from '../config/palette';
 import { playError, unlockAudio } from '../audio/sfx';
 import { drawSiteBackdrop } from '../entities/Room';
+import { anchorBottom } from '../gfx/effects';
 import { pixelText } from '../gfx/pixelFont';
 import { makeSprite, type SpriteData } from '../gfx/pixelSprite';
 import { ArcadeButton, drawPanel } from '../gfx/ui';
@@ -111,6 +112,8 @@ export class Menu extends Phaser.Scene {
   create(): void {
     this.input.enabled = true;
     this.input.once(Phaser.Input.Events.POINTER_DOWN, () => unlockAudio());
+    // come Game: layout 180x320 sul bordo basso, sugli schermi lunghi il cielo continua sopra
+    anchorBottom(this);
 
     this.buildBackground();
     // l'altalena prima del titolo: le corde passano dietro la scritta
@@ -124,7 +127,7 @@ export class Menu extends Phaser.Scene {
   private buildBackground(): void {
     // stesso cantiere del gioco, tutto a depth 0 (titolo, altalena e pulsanti sopra)
     drawSiteBackdrop(this, { flat: true });
-    pixelText(this, SCREEN.width / 2, SCREEN.height - 15, 'V0.1', C.plum, C.black).setOrigin(0.5, 0);
+    pixelText(this, SCREEN.width / 2, SCREEN.baseHeight - 15 - SCREEN.safeBottom, 'V0.1', C.plum, C.black).setOrigin(0.5, 0);
   }
 
   // ---------------------------------------------------------- titolo
@@ -141,7 +144,9 @@ export class Menu extends Phaser.Scene {
       );
       return { letters, chars, baseY: y, colorOffset };
     };
-    const words = [makeWord('SPLAK', 12, 0), makeWord('TONY', 12 + GH * s + 5, 2)];
+    // il titolo resta attaccato al bordo alto (sotto il notch)
+    const y0 = 12 + TOP_SHIFT;
+    const words = [makeWord('SPLAK', y0, 0), makeWord('TONY', y0 + GH * s + 5, 2)];
     const total = words.reduce((n, w) => n + w.letters.length, 0);
 
     let frame = 0;
@@ -172,8 +177,10 @@ export class Menu extends Phaser.Scene {
 
   private buildSwing(): void {
     const ax = SCREEN.width / 2;
-    const ay = MENU.swingPivotY;
-    const L = MENU.swingRope;
+    // schermi lunghi: il perno resta sopra il bordo alto, il sedile sale di metà delle righe in più
+    // (a metà tra il titolo, salito in cima, e i pulsanti, rimasti in basso)
+    const ay = MENU.swingPivotY + SCREEN.top;
+    const L = MENU.swingRope - SCREEN.top + Math.round(TOP_SHIFT / 2);
 
     // appesa a qualcosa fuori schermo: le corde di rame salgono ed escono dal bordo alto
     const swing = this.add.container(ax, ay);

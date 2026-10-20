@@ -51,6 +51,8 @@ export class ProgressHUD extends Phaser.Scene {
   }
 
   create(): void {
+    // tutta la HUD di progressione sta in alto: scende sotto il notch con la camera
+    this.cameras.main.setScroll(0, -SCREEN.safeTop);
     this.lastXpFill = -1;
     this.lastLevel = -1;
     this.lastMult = 1;

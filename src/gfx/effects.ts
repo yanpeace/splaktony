@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { FX, JUICE } from '../config/balance';
+import { FX, JUICE, SCREEN } from '../config/balance';
 import { C, col, type ColorIndex } from '../config/palette';
 import { fontKey, ensurePixelFont, normalizeText } from './pixelFont';
 
@@ -100,9 +100,10 @@ function tick(scene: Phaser.Scene, s: FxState, dtMs: number): void {
   if (now < s.shakeUntil) {
     const k = (s.shakeUntil - now) / Math.max(1, s.shakeUntil - s.shakeStart);
     const a = Math.max(1, Math.round(s.shakePx * k));
-    cam.setScroll(Phaser.Math.Between(-a, a), Phaser.Math.Between(-a, a));
-  } else if (cam.scrollX !== 0 || cam.scrollY !== 0) {
-    cam.setScroll(0, 0);
+    const base = cameraBase(cam);
+    cam.setScroll(Phaser.Math.Between(-a, a), base + Phaser.Math.Between(-a, a));
+  } else if (cam.scrollX !== 0 || cam.scrollY !== cameraBase(cam)) {
+    cam.setScroll(0, cameraBase(cam));
   }
 
   tickNumbers(s, now);
@@ -182,6 +183,23 @@ export function shake(scene: Phaser.Scene, px: number = FX.shakePx, ms: number =
   s.shakePx = Math.max(active ? s.shakePx : 0, Math.round(px));
   s.shakeStart = now;
   s.shakeUntil = Math.max(s.shakeUntil, now + ms);
+}
+
+// ---------------------------------------------------------------- camera ancorata in basso
+
+/** scroll verticale "a riposo" delle camere ancorate in basso (lo shake ci torna sopra) */
+const baseScroll = new WeakMap<Phaser.Cameras.Scene2D.Camera, number>();
+const cameraBase = (cam: Phaser.Cameras.Scene2D.Camera) => baseScroll.get(cam) ?? 0;
+
+/**
+ * Camera principale ancorata in basso: il layout di base 0..320 occupa le
+ * ultime righe dello schermo e le righe in più (schermi lunghi) mostrano
+ * y < 0, da SCREEN.top in su. Scroll intero, anche durante lo shake.
+ */
+export function anchorBottom(scene: Phaser.Scene): void {
+  const cam = scene.cameras.main;
+  baseScroll.set(cam, SCREEN.top);
+  cam.setScroll(0, SCREEN.top);
 }
 
 // ---------------------------------------------------------------- hit-stop

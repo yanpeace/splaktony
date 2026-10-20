@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { WORLDS } from '../config/balance';
+import { SCREEN, WORLDS } from '../config/balance';
 import { PALETTE_INT } from '../config/palette';
 
 /**
@@ -41,6 +41,8 @@ export const TW = {
   groundY: 292,
   width: 180,
   height: 320,
+  /** prima riga dello sfondo: sugli schermi lunghi la volta continua sopra lo 0 (SCREEN.top <= 0) */
+  top: SCREEN.top,
 } as const;
 
 /** Proiezione mondo → schermo (non arrotondata). */
@@ -398,7 +400,10 @@ export interface TunnelBackdrop {
 /** Sfondo della galleria per un mondo (cambia solo il cartello della distanza). */
 export function buildBackdrop(world = 2): TunnelBackdrop {
   const W: number = TW.width;
-  const H: number = TW.groundY; // righe 0..291 calcolate col ray-cast; il terreno è disegnato a parte
+  // righe Y0..291 calcolate col ray-cast (Y0 < 0 sugli schermi lunghi); il terreno è disegnato a parte.
+  // Negli array la riga r corrisponde alla y a schermo r + Y0.
+  const Y0: number = TW.top;
+  const H: number = TW.groundY - Y0;
   const N = W * H;
   const nL = LAMPS.length;
   const kind = new Uint8Array(N);
@@ -414,9 +419,10 @@ export function buildBackdrop(world = 2): TunnelBackdrop {
 
   const { f, r, yc, yf, tbmZ } = TW;
 
-  for (let y = 0; y < H; y++) {
+  for (let r0 = 0; r0 < H; r0++) {
+    const y = r0 + Y0;
     for (let x = 0; x < W; x++) {
-      const i = y * W + x;
+      const i = r0 * W + x;
       const ux = (x + 0.5 - TW.vpX) / f;
       const uy = (y + 0.5 - TW.vpY) / f;
       const a = ux * ux + uy * uy;
@@ -667,7 +673,7 @@ export function buildBackdrop(world = 2): TunnelBackdrop {
 
   // cartelli appesi alla volta (emissivi) con i ganci
   const plot = (x: number, y: number, c: number) => {
-    if (x >= 0 && y >= 0 && x < W && y < H) emis[y * W + x] = c;
+    if (x >= 0 && y >= Y0 && x < W && y < TW.groundY) emis[(y - Y0) * W + x] = c;
   };
   for (const s of [SIGNS.exit, distSign(world)]) {
     const p = signTopLeft(s);
@@ -696,20 +702,20 @@ export function buildBackdrop(world = 2): TunnelBackdrop {
     return RAMP[m][lvl];
   };
 
-  const bg = image(0, 0, W, TW.height);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) bg.data[y * W + x] = color(y * W + x, x, y, -1);
+  const bg = image(0, Y0, W, TW.height - Y0);
+  for (let r0 = 0; r0 < H; r0++) for (let x = 0; x < W; x++) bg.data[r0 * W + x] = color(r0 * W + x, x, r0 + Y0, -1);
   drawGround(bg);
 
   const shades: IndexImage[] = [];
   for (let l = 0; l < nL; l++) {
     const tmp = new Uint8Array(N).fill(T);
     let x0 = W;
-    let y0 = H;
+    let y0: number = TW.groundY;
     let x1 = -1;
     let y1 = -1;
-    for (let y = 0; y < H; y++) {
+    for (let y = Y0; y < TW.groundY; y++) {
       for (let x = 0; x < W; x++) {
-        const i = y * W + x;
+        const i = (y - Y0) * W + x;
         if (lamp[l * N + i] < 0.01) continue;
         const c = color(i, x, y, l);
         if (c === bg.data[i]) continue;
@@ -725,7 +731,7 @@ export function buildBackdrop(world = 2): TunnelBackdrop {
       continue;
     }
     const s = image(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) s.data[(y - y0) * s.w + (x - x0)] = tmp[y * W + x];
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) s.data[(y - y0) * s.w + (x - x0)] = tmp[(y - Y0) * W + x];
     shades.push(s);
   }
 
@@ -762,7 +768,7 @@ function drawGround(bg: IndexImage): void {
         }
         if (y >= TW.height - 2) c = 0;
       }
-      bg.data[y * W + x] = c;
+      bg.data[(y - bg.y) * W + x] = c;
     }
   }
 }

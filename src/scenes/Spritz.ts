@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { SCREEN, SPRITZ } from '../config/balance';
 import { C, col, PALETTE_INT } from '../config/palette';
 import { noise, playCoin, playLevelUp, tone, unlockAudio } from '../audio/sfx';
-import { acquireImage, popFrames, releaseImage, shake, spawnParticles } from '../gfx/effects';
+import { acquireImage, anchorBottom, popFrames, releaseImage, shake, spawnParticles } from '../gfx/effects';
 import { pixelText, setPixelText } from '../gfx/pixelFont';
 import {
   buildWallLayout,
@@ -56,14 +56,19 @@ interface FlyCoin {
 }
 
 const W = SCREEN.width;
-const H = SCREEN.height;
+/** layout di base 180x320: la camera è ancorata in basso, sugli schermi lunghi la vista continua sopra (y < 0) */
+const H = SCREEN.baseHeight;
+/** riga in alto della barra: bordo alto dello schermo + notch */
+const HUD_Y = SCREEN.top + SCREEN.safeTop;
+/** punto del dito → mondo (camera spostata) */
+const tmpPoint = new Phaser.Math.Vector2();
 const COAT_KEY = 'sz-coat';
 /** profondità degli oggetti della scena */
 const D = { view: 0, chunk: 1, coat: 2, flash: 3, drip: 4, drop: 6, lance: 20, reticle: 21, hud: 30, text: 40, party: 60, wipe: 1000 } as const;
 /** impaginazione HUD (pixel interi) */
-const BAR = { x: 58, y: 13, w: 82, h: 8 } as const;
-const GAUGE = { x: 3, y: 296, w: 62, h: 21 } as const;
-const PRIZE = { x: 115, y: 296, w: 62, h: 21 } as const;
+const BAR = { x: 58, y: HUD_Y + 13, w: 82, h: 8 } as const;
+const GAUGE = { x: 3, y: 296 - SCREEN.safeBottom, w: 62, h: 21 } as const;
+const PRIZE = { x: 115, y: 296 - SCREEN.safeBottom, w: 62, h: 21 } as const;
 
 /**
  * Minigioco SPRITZ (mondi 2 e 3): il giocatore è salito in cima alla talpa e
@@ -169,7 +174,8 @@ export class Spritz extends Phaser.Scene {
     this.hint = [];
     this.targetX = this.aimX = 90;
     this.targetY = this.aimY = 110;
-    this.cameras.main.setZoom(1).setOrigin(0.5).setScroll(0, 0);
+    this.cameras.main.setZoom(1).setOrigin(0.5);
+    anchorBottom(this);
 
     this.scene.pause('Game');
     registerSpritzSprites(this);
@@ -183,7 +189,7 @@ export class Spritz extends Phaser.Scene {
     this.restore(sp.percent);
 
     // un fondo interattivo a schermo pieno: niente tocchi alle scene sotto
-    this.add.zone(0, 0, W, H).setOrigin(0).setInteractive().setDepth(-1);
+    this.add.zone(0, SCREEN.top, W, SCREEN.height).setOrigin(0).setInteractive().setDepth(-1);
     this.input.on(Phaser.Input.Events.POINTER_DOWN, this.onDown, this);
     this.input.on(Phaser.Input.Events.POINTER_MOVE, this.onMove, this);
     this.input.on(Phaser.Input.Events.POINTER_UP, this.onUp, this);
@@ -211,7 +217,7 @@ export class Spritz extends Phaser.Scene {
 
   private buildView(): void {
     const v = this.viewObjs;
-    v.push(this.add.image(0, 0, 'sz-view').setOrigin(0).setDepth(D.view));
+    v.push(this.add.image(0, SCREEN.top, 'sz-view').setOrigin(0).setDepth(D.view));
     for (const c of this.layout.chunks) v.push(this.add.image(c.x, c.y, c.key).setDepth(D.chunk));
 
     // cemento: una canvas a schermo pieno, scritta a pixel e caricata al massimo una volta per frame
@@ -258,16 +264,16 @@ export class Spritz extends Phaser.Scene {
     h.push(g);
 
     // barra in alto: percentuale grande, barra di avanzamento, ESCI
-    drawPanel(g, 0, 0, W, 24, { shadow: C.black });
-    this.pctText = pixelText(this, 4, 3, '0%', C.white).setScale(2).setDepth(D.hud + 1);
-    h.push(this.pctText, pixelText(this, BAR.x, 3, 'RIVESTIMENTO', C.silver).setDepth(D.hud + 1));
+    drawPanel(g, 0, SCREEN.top, W, 24 + SCREEN.safeTop, { shadow: C.black });
+    this.pctText = pixelText(this, 4, HUD_Y + 3, '0%', C.white).setScale(2).setDepth(D.hud + 1);
+    h.push(this.pctText, pixelText(this, BAR.x, HUD_Y + 3, 'RIVESTIMENTO', C.silver).setDepth(D.hud + 1));
     this.barG = this.add.graphics().setDepth(D.hud + 1);
     h.push(this.barG);
 
     const exitLabel = pixelText(this, 0, 0, 'ESCI', C.white);
     exitLabel.setPosition(-Math.floor(exitLabel.width / 2), -4);
     const exitBtn = alignButtonHit(
-      new ArcadeButton(this, W - 3 - 31, 4, {
+      new ArcadeButton(this, W - 3 - 31, HUD_Y + 4, {
         w: 31,
         h: 15,
         fill: C.red,
@@ -306,7 +312,7 @@ export class Spritz extends Phaser.Scene {
 
     // tendine nere per ingresso/uscita (sempre sopra a tutto)
     const black = col(C.black);
-    this.wipeTop = this.add.rectangle(0, 0, W, 0, black).setOrigin(0).setDepth(D.wipe);
+    this.wipeTop = this.add.rectangle(0, SCREEN.top, W, 0, black).setOrigin(0).setDepth(D.wipe);
     this.wipeBottom = this.add.rectangle(0, H, W, 0, black).setOrigin(0, 1).setDepth(D.wipe);
   }
 
@@ -395,7 +401,7 @@ export class Spritz extends Phaser.Scene {
     const n = SPRITZ.wipeSteps;
     let k = 0;
     const set = (step: number) => {
-      const h = Math.ceil((H / 2) * (step / n));
+      const h = Math.ceil((SCREEN.height / 2) * (step / n));
       this.wipeTop.height = h;
       this.wipeBottom.height = h;
     };
@@ -441,8 +447,9 @@ export class Spritz extends Phaser.Scene {
   }
 
   private setTarget(p: Phaser.Input.Pointer): void {
-    this.targetX = Phaser.Math.Clamp(Math.round(p.x), 2, W - 3);
-    this.targetY = Phaser.Math.Clamp(Math.round(p.y + SPRITZ.aimOffsetY), SPRITZ.wallTop, SPRITZ.deckY - 2);
+    const w = this.cameras.main.getWorldPoint(p.x, p.y, tmpPoint);
+    this.targetX = Phaser.Math.Clamp(Math.round(w.x), 2, W - 3);
+    this.targetY = Phaser.Math.Clamp(Math.round(w.y + SPRITZ.aimOffsetY), SPRITZ.wallTop, SPRITZ.deckY - 2);
   }
 
   // ---------------------------------------------------------------- ciclo

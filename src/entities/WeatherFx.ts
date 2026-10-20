@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { RAGDOLL, ROOM_INNER, SCREEN, WEATHER as W } from '../config/balance';
+import { RAGDOLL, ROOM_INNER, SCREEN, TOP_SHIFT, WEATHER as W } from '../config/balance';
 import { C, col } from '../config/palette';
 import { spawnParticles } from '../gfx/effects';
 import { pixelText, setPixelText } from '../gfx/pixelFont';
@@ -73,6 +73,8 @@ const DEBRIS_KINDS = [
 const BOLT_KEYS = ['wx-bolt-0', 'wx-bolt-1', 'wx-bolt-2'];
 const BOLT_W = 25;
 const BOLT_H = 92;
+/** partenza di fiocchi e gocce: sotto il tubo dell'HUD, che sugli schermi lunghi sale (la saetta resta sullo sfondo) */
+const SPAWN_Y = W.spawnY + TOP_SHIFT;
 
 /** Saetta a zig-zag (pixel interi): nucleo bianco, bordo ciano, un ramo. */
 function boltSprite(): string[] {
@@ -214,17 +216,17 @@ export class WeatherFx {
     this.ground = scene.add.graphics().setDepth(DEPTH_GROUND);
     this.cap = scene.add.image(0, 0, 'wx-cap-1').setOrigin(0.5, 1).setDepth(15.5).setVisible(false);
     this.flash = scene.add
-      .rectangle(-8, -8, SCREEN.width + 16, SCREEN.height + 16, col(C.white))
+      .rectangle(-8, SCREEN.top - 8, SCREEN.width + 16, SCREEN.height + 16, col(C.white))
       .setOrigin(0)
       .setDepth(DEPTH_FLASH)
       .setVisible(false);
     this.bolt = scene.add.image(0, 0, BOLT_KEYS[0]).setOrigin(0.5, 0).setDepth(DEPTH_BOLT).setVisible(false);
-    this.announceA = pixelText(scene, SCREEN.width / 2, W.announceY, '', C.white)
+    this.announceA = pixelText(scene, SCREEN.width / 2, W.announceY + TOP_SHIFT, '', C.white)
       .setOrigin(0.5, 0)
       .setScale(2)
       .setDepth(DEPTH_ANNOUNCE)
       .setVisible(false);
-    this.announceB = pixelText(scene, SCREEN.width / 2, W.announceY, '', C.cyan)
+    this.announceB = pixelText(scene, SCREEN.width / 2, W.announceY + TOP_SHIFT, '', C.cyan)
       .setOrigin(0.5, 0)
       .setScale(2)
       .setDepth(DEPTH_ANNOUNCE)
@@ -375,7 +377,7 @@ export class WeatherFx {
     const snowTarget = Math.round(W.snowMax * lv.snow);
     const rainTarget = Math.round(lv.rainMax * lv.rain);
     let budget: number = W.spawnPerFrame;
-    const top = W.spawnY;
+    const top = SPAWN_Y;
     while (budget > 0 && this.liveSnow < snowTarget) {
       const d = this.acquire('snow');
       if (!d) break;
