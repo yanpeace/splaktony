@@ -14,7 +14,7 @@ import { events } from './events';
  */
 
 export const SAVE_KEY = 'splaktony.save';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export interface SaveData {
   version: typeof SAVE_VERSION;
@@ -29,6 +29,8 @@ export interface SaveData {
   /** livello di potenziamento per arma: { punch: 0 } */
   weaponLevels: Record<string, number>;
   settings: { muted: boolean };
+  /** mondo scelto nel Menu (v2): 1 = cantiere, 2 = dentro la galleria */
+  world: 1 | 2;
 }
 
 export function defaultSave(): SaveData {
@@ -43,6 +45,7 @@ export function defaultSave(): SaveData {
     ownedWeapons: ['punch'],
     weaponLevels: { punch: 0 },
     settings: { muted: false },
+    world: 1,
   };
 }
 
@@ -50,7 +53,8 @@ type AnySave = { version: number } & Record<string, unknown>;
 
 /** MIGRATIONS[n] trasforma dati di versione n in dati di versione n+1. */
 const MIGRATIONS: Record<number, (old: AnySave) => AnySave> = {
-  // 1: (d) => ({ ...d, version: 2, nuovoCampo: 0 }),
+  // v2: mondo scelto nel Menu
+  1: (d) => ({ ...d, version: 2, world: 1 }),
 };
 
 function migrate(raw: AnySave): SaveData {
@@ -80,7 +84,8 @@ function ensureStarterWeapon(s: SaveData): SaveData {
   }
   levels.punch ??= 0;
   const selectedWeapon = owned.includes(s.selectedWeapon) ? s.selectedWeapon : 'punch';
-  return { ...s, ownedWeapons: [...new Set(owned)], weaponLevels: levels, selectedWeapon };
+  const world = s.world === 2 ? 2 : 1;
+  return { ...s, ownedWeapons: [...new Set(owned)], weaponLevels: levels, selectedWeapon, world };
 }
 
 export function load(): SaveData {
@@ -142,6 +147,7 @@ export function initSave(): SaveData {
   bound = true;
   events.on('weapon:selected', (e) => patchSave({ selectedWeapon: e.weaponId }));
   events.on('level:up', (e) => patchSave({ level: e.level }));
+  events.on('world:changed', (e) => patchSave({ world: e.world }));
   events.on('settings:changed', (s) => patchSave({ settings: { ...getSave().settings, ...s } }));
   window.addEventListener('pagehide', flushSave);
   document.addEventListener('visibilitychange', () => {

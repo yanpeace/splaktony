@@ -607,8 +607,12 @@ export const CRASH = {
   skidSpeedMult: 0.8,
   /** spostamento dal centro strada, in frazioni della larghezza (+ = a destra) */
   lane: 0.15,
-  /** larghezza a schermo desiderata dell'auto = carWidthK / z (sceglie la taglia pre-disegnata) */
-  carWidthK: 30,
+  /**
+   * larghezza a schermo desiderata dell'auto = carWidthK / z (sceglie la taglia
+   * pre-disegnata): con 45 l'auto è larga 10 px nel tratto dritto e contro
+   * l'albero (z 3,75..5,3), 28/20/14 lungo le curve, 7 vicino alla galleria
+   */
+  carWidthK: 45,
   /** entro ±backViewDeg dalla verticale l'auto si vede da dietro, oltre di 3/4 */
   backViewDeg: 14,
   /** scossone all'impatto (leggero: l'incidente è lontano) */
@@ -626,4 +630,37 @@ export const CRASH = {
   leaveMs: 900,
   /** scritta "SBAM!" + monete */
   textMs: 1700,
+  /**
+   * driveIntoTunnel (intro del mondo 2): l'auto non esce di strada, segue la
+   * strada fino a Z_FAR con velocità massima tunnelSpeedMax (z/s), poi entra
+   * nella bocca: tunnelFadeFrames frame di sagoma nel buio, poi il lampo dei
+   * fanali per tunnelFlashFrames frame
+   */
+  tunnelSpeedMax: 2.6,
+  tunnelFadeFrames: 3,
+  tunnelFlashFrames: 4,
+} as const;
+
+// ---- MONDI ----
+
+/**
+ * Mondi (scenes/Menu.ts, scenes/Game.ts): 1 = cantiere fuori dalla galleria,
+ * 2 = dentro la galleria. Scegliendo il mondo 2 si parte nel mondo 1 con
+ * l'intro: dopo introDelayMs l'utilitaria entra nella galleria, la camera
+ * zooma dentro la bocca, dissolvenza al nero e restart di Game nel mondo 2,
+ * che parte zoomato e fa zoom-out fino a 1.
+ */
+export const WORLDS = {
+  /** livello giocatore che sblocca il mondo 2 */
+  unlockLevel: 5,
+  /** attesa (ms di gioco) prima che l'auto dell'intro parta dal basso */
+  introDelayMs: 5000,
+  /** zoom a scatti dentro la bocca della galleria (un livello ogni zoomStepMs) */
+  zoomIn: [1.5, 2, 3, 4, 5, 6, 7],
+  /** zoom-out all'arrivo nel mondo 2 (dal primo valore fino a 1) */
+  zoomOut: [7, 5, 4, 3, 2, 1.5, 1],
+  zoomStepMs: 110,
+  /** dissolvenza al nero prima del restart e schiarita all'arrivo */
+  fadeOutMs: 220,
+  fadeInMs: 260,
 } as const;
