@@ -7,7 +7,8 @@ import { PALETTE_INT } from '../config/palette';
  *
  * Lo sfondo è un "ray-cast" fatto una volta sola: per ogni pixel si lancia un
  * raggio dall'occhio verso il fondo della galleria e si guarda cosa colpisce
- * (volta circolare, pavimento con binari e canaletta, tubo di ventilazione
+ * (volta circolare, carreggiata in asfalto con la segnaletica, cordoli e
+ * marciapiedi di servizio rialzati, canaletta con griglia, tubo di ventilazione
  * appeso alla volta, nastro trasportatore sulla parete destra). Le coordinate
  * "mondo" sono in px a profondità z = 1 (Z = 100): a schermo
  *   x = 90 + 100 * X / Z,   y = 150 + 100 * Y / Z
@@ -58,8 +59,23 @@ export const TBM = {
 const DUCT = { x: -22, y: -47, r: 9, zEnd: TW.tbmZ - 4 } as const;
 /** nastro trasportatore sulla parete destra: piano superiore e fianco verso l'asse */
 export const BELT = { x0: 84, x1: 104, y: 50, h: 8 } as const;
-/** binari: mezzo scartamento (mondo) */
-export const RAIL_X = 30;
+/**
+ * Strada (mondo): carreggiata a due corsie per |X| < side, cordolo alto curbH
+ * e marciapiede di servizio fino alla volta; linee di margine a |X| = edge,
+ * mezzeria tratteggiata a X = 0 (trattini di dashL/2 ogni dashL), centro delle
+ * corsie a ±lane; canaletta con griglia a sinistra contro il cordolo; oltre
+ * workZ (verso la talpa) le corsie sono provvisorie e la segnaletica è gialla.
+ */
+export const ROAD = {
+  side: 62,
+  curbH: 5,
+  edge: 51,
+  lane: 25,
+  dashL: 16,
+  gutter0: -61,
+  gutter1: -54,
+  workZ: 225,
+} as const;
 
 // ---------------------------------------------------------------- neon
 
@@ -260,9 +276,9 @@ const enum M {
   Far,
   Conc,
   Floor,
-  Ballast,
-  Rail,
-  Yellow,
+  Asphalt,
+  YPaint,
+  Reflector,
   Water,
   Duct,
   Belt,
@@ -280,9 +296,9 @@ const RAMP: Record<number, readonly number[]> = {
   [M.Far]: [0, 0, 0, 0, 0],
   [M.Conc]: [0, 15, 14, 13, 12],
   [M.Floor]: [0, 15, 14, 13, 12],
-  [M.Ballast]: [0, 0, 15, 14, 13],
-  [M.Rail]: [15, 14, 13, 12, 12],
-  [M.Yellow]: [0, 1, 3, 4, 4],
+  [M.Asphalt]: [0, 15, 15, 15, 14],
+  [M.YPaint]: [1, 3, 4, 4, 4],
+  [M.Reflector]: [2, 3, 4, 4, 4],
   [M.Water]: [0, 0, 8, 7, 11],
   [M.Duct]: [2, 3, 3, 4, 4],
   [M.Belt]: [0, 0, 15, 15, 14],
@@ -295,7 +311,7 @@ const RAMP: Record<number, readonly number[]> = {
   [M.Rock]: [0, 1, 15, 14, 13],
 };
 /** materiali che con la luce calda dominante virano all'arancio/giallo nei livelli alti */
-const WARMABLE = new Set<number>([M.Conc, M.Floor, M.Steel, M.Ballast]);
+const WARMABLE = new Set<number>([M.Conc, M.Floor, M.Steel]);
 const WARM_RAMP = [0, 15, 14, 3, 4];
 
 const WALL_DECALS: readonly WallDecal[] = [
@@ -323,18 +339,20 @@ const WALL_DECALS: readonly WallDecal[] = [
   { side: 1, z0: 176, z1: 158, y0: 10, y1: 22, mat: decalFromRows(ringNumber(47), M.Paint) },
 ];
 
-/** pozzanghere sul pavimento: centro (X, Z) e semiassi */
+/** pozzanghere sull'asfalto: centro (X, Z) e semiassi */
 const PUDDLES: readonly [number, number, number, number][] = [
-  [12, 135, 9, 14],
-  [-48, 205, 7, 14],
-  [-18, 285, 7, 16],
+  [14, 132, 8, 12],
+  [-40, 205, 6, 13],
+  [-20, 290, 6, 15],
 ];
 
 const RING_L = 30; // lunghezza di un anello di conci (mondo)
 const SEGMENTS = 7; // conci per anello (sfalsati di mezzo concio tra anelli vicini)
 const RIB_L = 9; // passo della spirale del tubo flessibile
-const SLAB_L = 45; // giunti della soletta ai lati dei binari
-const SLEEPER_L = 20;
+const SLAB_L = 45; // giunti delle lastre del marciapiede
+const CURB_L = 15; // blocchi del cordolo
+/** riflesso lucido dei neon sull'asfalto: banda sotto la lampada, spostata verso chi guarda */
+const SHEEN = { i: 1.0, w: 26, kz: 16, near: 16, far: 4 } as const;
 
 // ---------------------------------------------------------------- ray-cast dello sfondo
 
@@ -342,6 +360,8 @@ const enum K {
   None,
   Wall,
   Floor,
+  Curb,
+  Walk,
   Duct,
   BeltTop,
   BeltFront,
@@ -386,9 +406,24 @@ export function buildBackdrop(): TunnelBackdrop {
       const c = yc * yc - r * r;
       let t = (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a);
       let k: K = K.Wall;
-      if (uy * t > yf) {
-        t = yf / uy;
-        k = K.Floor;
+      // carreggiata (Y = yf), cordolo e marciapiede rialzato (Y = yf - curbH)
+      if (uy > 0) {
+        let tg = yf / uy;
+        let kg: K = K.Floor;
+        if (Math.abs(ux * tg) >= ROAD.side) {
+          const tc = ROAD.side / Math.abs(ux);
+          if (uy * tc >= yf - ROAD.curbH) {
+            tg = tc;
+            kg = K.Curb;
+          } else {
+            tg = (yf - ROAD.curbH) / uy;
+            kg = K.Walk;
+          }
+        }
+        if (tg < t) {
+          t = tg;
+          k = kg;
+        }
       }
       // tubo di ventilazione
       const bd = -2 * (ux * DUCT.x + uy * DUCT.y);
@@ -439,6 +474,7 @@ export function buildBackdrop(): TunnelBackdrop {
           keyB[i] = Math.floor((alpha / (Math.PI * 2)) * SEGMENTS + (ring & 1) * 0.5 + 100);
           al = 0.95 + 0.1 * hash(Math.floor(Z / 6), Math.floor(alpha * 40));
           if (Y > 118) al *= 0.82; // sporco in basso
+          if (Y > 128) al *= 0.72; // zoccolo scuro sopra il marciapiede
           // cavi sulla parete sinistra, appesi tra le staffe
           if (X < 0) {
             const u = mod(Z, 40) / 40;
@@ -465,39 +501,64 @@ export function buildBackdrop(): TunnelBackdrop {
           break;
         }
         case K.Floor: {
+          // asfalto: grana leggera a chiazze di 2 unità, niente rumore per pixel
           const ax = Math.abs(X);
           const dzdy = (Z * Z) / (yf * f);
           const px = (0.5 * Z) / f; // mezzo pixel in unità mondo
-          m = M.Floor;
-          al = 0.8 + 0.15 * hash(Math.floor(X / 3), Math.floor(Z / 3));
-          if (ax < 42) {
-            m = M.Ballast;
-            al = 0.75 + 0.45 * hash(x, y);
-            if (ax < 38 && dzdy < 7 && mod(Z, SLEEPER_L) < 7) {
-              m = M.Conc;
-              al = 0.85;
-            }
-            if (Math.abs(ax - RAIL_X) < Math.max(1.6, px)) {
-              m = M.Rail;
-              al = 1;
-            }
-          } else {
-            keyA[i] = Math.floor(Z / SLAB_L);
-            if (ax > 64 && ax < 67) m = M.Yellow;
-            if (X < -72 && X > -86) {
-              // canaletta con grata
-              m = Math.abs(X + 72) < Math.max(1.2, px) || Math.abs(X + 86) < Math.max(1.2, px) ? M.Steel : M.Water;
-              if (m === M.Water && mod(Z, 8) < Math.max(2.5, px * 2)) m = M.Steel;
-              al = m === M.Water ? 0.8 : 0.9;
-            }
-            if (ax > 93) al *= 0.75; // angolo con la parete
+          m = M.Asphalt;
+          const hg = hash(Math.floor(X / 2), Math.floor(Z / 2));
+          al = hg > 0.95 ? 1.15 : hg < 0.05 ? 0.7 : 0.9;
+          const paint = Z > ROAD.workZ ? M.YPaint : M.Paint;
+          // linee di margine continue
+          if (Math.abs(ax - ROAD.edge) < Math.max(1, px)) {
+            m = paint;
+            al = 1;
+          }
+          // mezzeria tratteggiata (i trattini si accorciano da soli in prospettiva)
+          if (ax < Math.max(1, px) && mod(Z, ROAD.dashL) < ROAD.dashL / 2) {
+            m = paint;
+            al = 1;
+          }
+          // catarifrangenti lungo i margini, verso l'interno delle corsie
+          if (Z < 300 && Math.abs(ax - (ROAD.edge - 4)) < Math.max(0.9, px) && mod(Z + 6, 24) < Math.max(1.4, dzdy * 0.9)) {
+            m = M.Reflector;
+            al = 1;
+          }
+          // canaletta con griglia contro il cordolo sinistro
+          if (X < ROAD.gutter1 && X > ROAD.gutter0) {
+            m = Math.abs(X - ROAD.gutter1) < Math.max(1.2, px) || Math.abs(X - ROAD.gutter0) < Math.max(1.2, px) ? M.Steel : M.Water;
+            if (m === M.Water && mod(Z, 8) < Math.max(2.5, px * 2)) m = M.Steel;
+            al = m === M.Water ? 0.8 : 0.9;
           }
           for (const [px0, pz0, rx, rz] of PUDDLES) {
             if (((X - px0) / rx) ** 2 + ((Z - pz0) / rz) ** 2 < 1) {
               m = M.Water;
-              al = 1.1;
+              al = 0.85;
             }
           }
+          break;
+        }
+        case K.Curb: {
+          // faccia verticale del cordolo, rivolta verso l'asse
+          nx = -Math.sign(X);
+          ny = 0;
+          m = M.Conc;
+          al = 0.9;
+          keyA[i] = Math.floor(Z / CURB_L);
+          break;
+        }
+        case K.Walk: {
+          // marciapiede di servizio in cemento a lastre, spigolo del cordolo più chiaro
+          const ax = Math.abs(X);
+          const px = (0.5 * Z) / f;
+          m = M.Floor;
+          al = 1.05 + 0.12 * hash(Math.floor(X / 3), Math.floor(Z / 3));
+          keyA[i] = Math.floor(Z / SLAB_L);
+          if (ax < ROAD.side + Math.max(1.5, px)) {
+            m = M.Paint;
+            al = 1.3;
+          }
+          if (ax > 86) al *= 0.75; // angolo con la parete
           break;
         }
         case K.Duct: {
@@ -554,7 +615,14 @@ export function buildBackdrop(): TunnelBackdrop {
         const d = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.001;
         const ndl = (nx * dx + ny * dy) / d;
         const dp2 = dx * dx + dy * dy;
-        lamp[l * N + i] = (LAMP_I * (0.25 + 0.75 * Math.max(0, ndl))) * Math.exp(-((dz / LAMP_KZ) ** 2)) / (1 + dp2 / (LAMP_KP * LAMP_KP));
+        let li = (LAMP_I * (0.25 + 0.75 * Math.max(0, ndl))) * Math.exp(-((dz / LAMP_KZ) ** 2)) / (1 + dp2 / (LAMP_KP * LAMP_KP));
+        if (k === K.Floor) {
+          // asfalto un po' lucido: banda chiara sotto la lampada, allungata verso chi guarda
+          const zs = Z < L.z0 - SHEEN.near ? L.z0 - SHEEN.near : Z > L.z1 - SHEEN.far ? L.z1 - SHEEN.far : Z;
+          const sh = SHEEN.i * Math.exp(-(((X - L.X * 0.8) / SHEEN.w) ** 2)) * Math.exp(-(((zs - Z) / SHEEN.kz) ** 2));
+          li += m === M.Asphalt || m === M.Water ? sh : 0;
+        }
+        lamp[l * N + i] = li;
       }
     }
   }
@@ -564,7 +632,7 @@ export function buildBackdrop(): TunnelBackdrop {
     for (let x = 0; x < W; x++) {
       const i = y * W + x;
       const k = kind[i];
-      if (k !== K.Wall && k !== K.Duct && k !== K.Floor) continue;
+      if (k !== K.Wall && k !== K.Duct && k !== K.Walk && k !== K.Curb) continue;
       if (keyA[i] === -99999) continue;
       let joint = false;
       const nb = [x + 1 < W ? i + 1 : -1, y + 1 < H ? i + W : -1];
@@ -645,11 +713,12 @@ export function buildBackdrop(): TunnelBackdrop {
   return { bg, shades, bars: LAMPS.map(neonBar) };
 }
 
-/** Terreno di gioco: soletta compatta con bordo netto (y 292..319). */
+/** Terreno di gioco: asfalto compatto con bordo netto (y 292..319), la segnaletica prosegue verso chi guarda. */
 function drawGround(bg: IndexImage): void {
   const W = bg.w;
   const g0 = TW.groundY;
   for (let y = g0; y < TW.height; y++) {
+    const Z = (TW.yf * TW.f) / (y + 0.5 - TW.vpY);
     for (let x = 0; x < W; x++) {
       const dy = y - g0;
       let c: number;
@@ -658,18 +727,19 @@ function drawGround(bg: IndexImage): void {
       else if (dy <= 3) c = (Math.floor((x + dy) / 4) & 1) === 0 ? 4 : 0; // fascia di sicurezza gialla/nera
       else if (dy === 4) c = 0;
       else {
-        c = 15;
+        const X = ((x + 0.5 - TW.vpX) * Z) / TW.f;
+        const ax = Math.abs(X);
         const h = hash(x, y);
-        if (h > 0.86) c = 14;
-        else if (h < 0.05) c = 0;
-        if (dy === 5 && h > 0.4) c = 14;
-        // giunti delle lastre e binari incassati che proseguono verso chi guarda
-        if (mod(x + Math.floor(dy / 9) * 18, 36) === 0) c = 0;
-        const Z = (TW.yf * TW.f) / (y + 0.5 - TW.vpY);
-        for (const s of [-1, 1]) {
-          const rx = Math.round(TW.vpX + (TW.f * s * RAIL_X) / Z);
-          if (x === rx) c = 13;
-          if (x === rx + s) c = 0;
+        if (ax >= ROAD.side + 1.2) {
+          // marciapiede
+          c = h > 0.85 ? 13 : h < 0.08 ? 15 : 14;
+          if (mod(Z, SLAB_L) < 0.6) c = 15;
+        } else if (ax >= ROAD.side - 0.6) c = 13; // spigolo del cordolo
+        else {
+          c = h > 0.92 ? 14 : h < 0.05 ? 0 : 15;
+          if (Math.abs(ax - ROAD.edge) < 0.9) c = 12;
+          if (ax < 0.95 && mod(Z, ROAD.dashL) < ROAD.dashL / 2) c = 12;
+          if (X < ROAD.gutter1 && X > ROAD.gutter0) c = Math.abs(X - ROAD.gutter1) < 1 || Math.abs(X - ROAD.gutter0) < 1 || mod(Z, 8) < 2.5 ? 14 : 0;
         }
         if (y >= TW.height - 2) c = 0;
       }
@@ -927,68 +997,188 @@ export function workerRows(kind: 0 | 1, frame: 0 | 1): string[] {
   return g.map((r) => r.join(''));
 }
 
-/** Vagonetto visto davanti (front = locomotore con fari) o da dietro, larghezza w px. */
-export function wagonRows(w: number, front: boolean): string[] {
-  const h = Math.max(8, Math.round(w * 0.62));
+/**
+ * Navetta da cantiere per gallerie (trasporto del personale) larga w px:
+ * telaio basso giallo/arancio su 4 ruote scolpite, cabina di guida bassa e,
+ * sopra, il cassone passeggeri rialzato con la fila di finestrelle; striscia
+ * catarifrangente, scaletta, specchio. front = vista davanti (fari bianchi,
+ * parabrezza), altrimenti da dietro (luci rosse, porta, zebratura).
+ * frame 0/1 = battistrada delle ruote spostato di una riga (ruote che girano).
+ */
+export function vehicleRows(w: number, front: boolean, frame: 0 | 1): string[] {
+  const h = Math.max(11, Math.round(w * 0.96));
   const g: string[][] = Array.from({ length: h }, () => Array<string>(w).fill('.'));
-  const rect = (x: number, y: number, rw: number, rh: number, c: string) => {
-    for (let j = y; j < y + rh; j++) for (let i = x; i < x + rw; i++) if (j >= 0 && j < h && i >= 0 && i < w) g[j][i] = c;
+  const put = (i: number, j: number, c: string) => {
+    if (j >= 0 && j < h && i >= 0 && i < w) g[j][i] = c;
   };
-  const wheelH = Math.max(2, Math.round(h * 0.16));
-  const wheelW = Math.max(2, Math.round(w * 0.16));
-  const chassisH = Math.max(1, Math.round(h * 0.1));
-  const bodyTop = Math.max(2, Math.round(h * 0.18));
-  const bodyBot = h - wheelH - chassisH;
-  // ruote sulle rotaie
-  const wl = Math.round(w * 0.06);
-  rect(wl, h - wheelH, wheelW, wheelH, '0');
-  rect(w - wl - wheelW, h - wheelH, wheelW, wheelH, '0');
-  // telaio
-  rect(0, bodyBot, w, chassisH, 'f');
-  // cassa
-  rect(0, bodyTop, w, bodyBot - bodyTop, front ? '4' : 'e');
-  rect(w - Math.max(1, Math.round(w * 0.12)), bodyTop, Math.max(1, Math.round(w * 0.12)), bodyBot - bodyTop, front ? '3' : 'f');
-  // tetto / carico
-  if (front) {
-    rect(Math.round(w * 0.12), 0, w - Math.round(w * 0.24), bodyTop, '3');
-    // parabrezza
-    const ww = Math.round(w * 0.56);
-    const wh = Math.max(2, Math.round((bodyBot - bodyTop) * 0.4));
-    rect(Math.round((w - ww) / 2), bodyTop + 1, ww, wh, 'a');
-    rect(Math.round((w - ww) / 2), bodyTop + 1, Math.max(1, Math.round(ww * 0.25)), 1, 'b');
-    // fari
-    const fy = bodyBot - Math.max(2, Math.round(h * 0.14));
-    const fs = Math.max(1, Math.round(w * 0.1));
-    rect(Math.round(w * 0.1), fy, fs, Math.max(1, fs - 1), 'c');
-    rect(w - Math.round(w * 0.1) - fs, fy, fs, Math.max(1, fs - 1), 'c');
-  } else {
-    // cassone pieno di detriti
-    for (let i = 0; i < w; i++) {
-      const top = bodyTop - 1 - Math.round(Math.sin((i / w) * Math.PI) * (bodyTop - 1));
-      for (let j = Math.max(0, top); j < bodyTop; j++) g[j][i] = (i * 7 + j * 3) % 5 === 0 ? 'd' : (i + j) % 3 === 0 ? '1' : 'e';
+  const rect = (x: number, y: number, rw: number, rh: number, c: string) => {
+    for (let j = y; j < y + rh; j++) for (let i = x; i < x + rw; i++) put(i, j, c);
+  };
+  const big = w >= 18;
+  const roofH = Math.max(2, Math.round(h * 0.08));
+  const boxBot = Math.round(h * 0.47); // fondo del cassone passeggeri
+  const chTop = Math.round(h * 0.62); // telaio
+  const chBot = h - Math.max(2, Math.round(h * 0.1));
+  const wheelW = Math.max(3, Math.round(w * 0.24));
+  const wheelH = Math.max(3, Math.round(h * 0.25));
+  const sh = Math.max(1, Math.round(w * 0.08)); // lato in ombra (luce dall'alto a sinistra)
+
+  // ---- cassone passeggeri rialzato
+  rect(1, 0, w - 2, 1, '0');
+  rect(1, 1, w - 2, roofH - 1, 'd'); // tetto visto un po' dall'alto, illuminato dai neon
+  rect(0, roofH, w, boxBot - roofH, front ? '4' : '3');
+  rect(w - sh, roofH, sh, boxBot - roofH, front ? '3' : '2');
+  // fila di finestrelle con i montanti scuri
+  const wy0 = roofH + 1;
+  const wh = Math.max(1, boxBot - roofH - 3);
+  const n = clamp(Math.round((w - 2) / 5), 2, 6);
+  for (let k = 0; k < n; k++) {
+    const xs = 1 + Math.round((k * (w - 1)) / n);
+    const xe = 1 + Math.round(((k + 1) * (w - 1)) / n) - 1; // montante
+    for (let i = xs; i < xe; i++) {
+      for (let j = 0; j < wh; j++) put(i, wy0 + j, j === 0 ? 'b' : j === wh - 1 && wh >= 3 ? '9' : 'a');
     }
-    // nervature e luci rosse
-    for (let i = Math.round(w / 4); i < w; i += Math.max(3, Math.round(w / 4))) rect(i, bodyTop, 1, bodyBot - bodyTop, 'f');
-    const fy = bodyBot - Math.max(2, Math.round(h * 0.14));
-    const fs = Math.max(1, Math.round(w * 0.08));
-    rect(1, fy, fs, Math.max(1, fs), '2');
-    rect(w - 1 - fs, fy, fs, Math.max(1, fs), '2');
+    if (xe <= w - 2) rect(xe, wy0, 1, wh, 'f');
+    if (k % 2 === 0 && xe - xs >= 2) put(xs, wy0, 'c');
   }
-  // contorno
+  // striscia catarifrangente bianca/rossa sotto i vetri
+  for (let i = 1; i < w - 1; i++) put(i, boxBot - 1, ((big ? i >> 1 : i) & 1) === 0 ? 'c' : '2');
+
+  const ci = Math.max(2, Math.round(w * 0.16));
+  if (front) {
+    // ---- cabina di guida bassa con parabrezza diviso
+    rect(ci, boxBot, w - 2 * ci, chTop - boxBot, '4');
+    rect(w - ci - sh, boxBot, sh, chTop - boxBot, '3');
+    const gh = Math.max(1, Math.round((chTop - boxBot) * 0.6));
+    rect(ci + 1, boxBot, w - 2 * ci - 2, gh, 'a');
+    rect(ci + 1, boxBot, w - 2 * ci - 2, 1, 'b');
+    if (w - 2 * ci - 2 >= 4) rect(Math.floor(w / 2), boxBot, 1, gh, 'f');
+    put(ci + 1, boxBot, 'c');
+    // specchio retrovisore a sinistra
+    if (big) {
+      rect(1, boxBot, ci - 1, 1, 'f');
+      rect(1, boxBot + 1, 1, 2, 'e');
+    }
+    // scaletta sul lato destro
+    if (big) {
+      for (let j = boxBot; j < chTop; j++) {
+        put(w - ci, j, 'e');
+        if (ci >= 4) put(w - 2, j, 'e');
+        if ((j - boxBot) % 2 === 1) for (let i = w - ci; i <= w - 2; i++) put(i, j, 'd');
+      }
+    }
+  } else {
+    // ---- parete posteriore con la porta e la scaletta in mezzo
+    rect(1, boxBot, w - 2, chTop - boxBot, '3');
+    rect(w - 1 - sh, boxBot, sh, chTop - boxBot, '2');
+    const dw = Math.max(2, Math.round(w * 0.28));
+    const dx = Math.round((w - dw) / 2);
+    rect(dx, roofH, dw, chTop - roofH, 'f');
+    rect(dx + 1, wy0, dw - 2, wh, 'a');
+    if (dw >= 4) rect(dx + 1, wy0, dw - 2, 1, 'b');
+    if (dw >= 3) rect(dx + 1, boxBot, dw - 2, chTop - boxBot, '3');
+    put(dx + dw - 2, boxBot + 1, '4'); // maniglia
+  }
+
+  // ---- telaio basso
+  rect(0, chTop, w, chBot - chTop, '3');
+  rect(0, chTop, w, 1, '4');
+  rect(0, chBot - 1, w, 1, '2');
+  const fs = Math.max(1, Math.round(w * 0.12));
+  const fy = chTop + 1;
+  const fh = Math.max(1, Math.min(fs, h - wheelH - fy));
+  if (front) {
+    // fari bianchi e griglia
+    rect(1, fy, fs, fh, 'c');
+    rect(w - 1 - fs, fy, fs, fh, 'c');
+    if (fs >= 2) {
+      put(fs, fy + fh - 1, 'b');
+      put(w - 2, fy + fh - 1, 'b');
+    }
+    for (let j = fy; j < fy + fh; j++) for (let i = fs + 3; i < w - fs - 3; i++) put(i, j, (j - fy) % 2 === 0 ? 'f' : '0');
+  } else {
+    // luci rosse e zebratura catarifrangente rossa/bianca
+    rect(1, fy, fs, fh, '2');
+    rect(w - 1 - fs, fy, fs, fh, '2');
+    if (fs >= 2) {
+      put(1, fy, 'c');
+      put(w - 1 - fs, fy, 'c');
+    }
+    for (let j = fy; j < chBot - 1; j++) for (let i = wheelW; i < w - wheelW; i++) put(i, j, mod(i + j, 4) < 2 ? 'c' : '2');
+    // scaletta sotto la porta
+    if (big) {
+      const lx = Math.round(w / 2) - 2;
+      for (let j = chTop; j < h - 1; j++) {
+        put(lx, j, 'e');
+        put(lx + 3, j, 'e');
+        if ((j - chTop) % 2 === 1) for (let i = lx + 1; i < lx + 3; i++) put(i, j, 'd');
+      }
+    }
+  }
+  // zebratura gialla/nera sul paraurti (vista davanti)
+  if (front && big) for (let i = wheelW; i < w - wheelW; i++) put(i, chBot - 1, mod(i, 4) < 2 ? '4' : '0');
+  // fondo scuro tra le ruote
+  rect(wheelW, chBot, w - 2 * wheelW, 1, '0');
+
+  // ---- ruote grandi scolpite (battistrada a spina che scorre di una riga per frame)
+  for (const x0 of [0, w - wheelW]) {
+    for (let j = 0; j < wheelH; j++) {
+      for (let i = 0; i < wheelW; i++) {
+        const corner = wheelW >= 4 && (i === 0 || i === wheelW - 1) && (j === 0 || j === wheelH - 1);
+        if (corner) {
+          if (j === 0) continue; // spigolo in alto: si vede il telaio
+          put(x0 + i, h - wheelH + j, '.');
+          continue;
+        }
+        let c: string;
+        if (i === 0 || i === wheelW - 1 || j === wheelH - 1) c = '0';
+        else {
+          const v = mod(j + frame + Math.floor(Math.abs(2 * i - (wheelW - 1)) / 2), 2);
+          c = v === 0 ? (i < wheelW / 2 ? 'e' : 'f') : '0';
+        }
+        put(x0 + i, h - wheelH + j, c);
+      }
+    }
+  }
+
+  // contorno scuro sui lati della carrozzeria
   for (let j = 0; j < h; j++) {
     for (let i = 0; i < w; i++) {
-      if (g[j][i] !== '.' && g[j][i] !== '0') {
-        if (i === 0 || i === w - 1 || j === 0 || g[j - 1]?.[i] === '.') {
-          if (i === 0 || i === w - 1 || j === 0) g[j][i] = '0';
-        }
-      }
+      if (!'432'.includes(g[j][i])) continue;
+      const nb = [g[j][i - 1], g[j][i + 1], g[j - 1]?.[i], g[j + 1]?.[i]];
+      if (i === 0 || i === w - 1 || nb.includes('.')) g[j][i] = '0';
     }
   }
   return g.map((r) => r.join(''));
 }
 
-/** Larghezza (mondo) del vagonetto: sta sulle rotaie (2 * RAIL_X) con un po' di sbalzo. */
-export const WAGON_W = 66;
+/** Alone dei fari sull'asfalto davanti alla navetta (retino chiaro che si dirada), largo w + 2 * round(w * 0.15). */
+export function vehicleGlowRows(w: number): string[] {
+  const m = Math.round(w * 0.15);
+  const gw = w + 2 * m;
+  const gh = Math.max(2, Math.round(w * 0.3));
+  const fs = Math.max(1, Math.round(w * 0.12));
+  const rows: string[] = [];
+  for (let j = 0; j < gh; j++) {
+    let row = '';
+    const t = (j + 0.5) / gh;
+    const hw = w / 2 + m * t;
+    for (let i = 0; i < gw; i++) {
+      const dx = Math.abs(i + 0.5 - gw / 2);
+      const beam = dx > w / 2 - fs - 2 - m * t; // più fitto davanti ai fari
+      const on = dx < hw && (i + j) % 2 === 0 && hash(i * 7 + w, j) > t * (beam ? 0.6 : 1.05) - 0.1;
+      row += on ? (beam && t < 0.5 ? 'd' : 'e') : '.';
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+/** Larghezza (mondo) della navetta: sta dentro una corsia (tra mezzeria e margine). */
+export const VEHICLE_W = 40;
+/** dalla taglia VEHICLE_SPIN_MIN in su le ruote girano a 2 frame */
+export const VEHICLE_SPIN_MIN = 18;
+export const vehicleKey = (w: number, front: boolean, frame: 0 | 1) => `tw-veh-${front ? 'f' : 'b'}${w}-${frame}`;
 
 // ---------------------------------------------------------------- registrazione
 
@@ -1000,7 +1190,8 @@ export function tunnelBackdrop(): TunnelBackdrop {
   return cached;
 }
 
-export const WAGON_SIZES: readonly number[] = Array.from({ length: 16 }, (_, k) => 16 + k * 2);
+/** taglie pre-disegnate della navetta (larghezza a schermo) */
+export const VEHICLE_SIZES: readonly number[] = Array.from({ length: 11 }, (_, k) => 10 + k * 2);
 
 export function registerTunnelSprites(scene: Phaser.Scene): TunnelBackdrop {
   const bd = tunnelBackdrop();
@@ -1019,11 +1210,16 @@ export function registerTunnelSprites(scene: Phaser.Scene): TunnelBackdrop {
   makeIndexTexture(scene, 'tw-emer-on', fromRows(EMERGENCY_ON));
   makeIndexTexture(scene, 'tw-emer-off', fromRows(EMERGENCY_OFF));
   for (const k of [0, 1] as const) for (const fr of [0, 1] as const) makeIndexTexture(scene, `tw-worker${k}-${fr}`, fromRows(workerRows(k, fr)));
-  for (const w of WAGON_SIZES) {
-    if (!scene.textures.exists(`tw-wagon-f${w}`)) makeIndexTexture(scene, `tw-wagon-f${w}`, fromRows(wagonRows(w, true)));
-    if (!scene.textures.exists(`tw-wagon-b${w}`)) makeIndexTexture(scene, `tw-wagon-b${w}`, fromRows(wagonRows(w, false)));
+  for (const w of VEHICLE_SIZES) {
+    for (const front of [true, false]) {
+      for (const fr of w >= VEHICLE_SPIN_MIN ? ([0, 1] as const) : ([0] as const)) {
+        const key = vehicleKey(w, front, fr);
+        if (!scene.textures.exists(key)) makeIndexTexture(scene, key, fromRows(vehicleRows(w, front, fr)));
+      }
+    }
+    if (!scene.textures.exists(`tw-vglow${w}`)) makeIndexTexture(scene, `tw-vglow${w}`, fromRows(vehicleGlowRows(w)));
   }
-  makeIndexTexture(scene, 'tw-wbeacon-on', fromRows(['.4.', '4c4']));
-  makeIndexTexture(scene, 'tw-wbeacon-off', fromRows(['.1.', '131']));
+  makeIndexTexture(scene, 'tw-vbeacon-on', fromRows(['.3.', '343']));
+  makeIndexTexture(scene, 'tw-vbeacon-off', fromRows(['.1.', '121']));
   return bd;
 }
