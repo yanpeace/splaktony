@@ -627,3 +627,132 @@ export const CRASH = {
   /** scritta "SBAM!" + monete */
   textMs: 1700,
 } as const;
+
+// ---- METEO ----
+
+/**
+ * Agenti atmosferici (systems/weather.ts + entities/WeatherFx.ts):
+ * sereno → evento (neve / pioggia / vento / temporale) → sereno.
+ * Velocità in px/step, accelerazioni in px/step per step, tempi in ms.
+ */
+export const WEATHER = {
+  /** pausa di sereno tra due eventi [min, max]; la prima è più corta */
+  clearMs: [40000, 120000],
+  firstClearMs: [20000, 45000],
+  /** durata di un evento [min, max] (rampe comprese) */
+  eventMs: [25000, 60000],
+  /** probabilità relative degli eventi */
+  weights: { snow: 1, rain: 1.2, wind: 1, storm: 0.8 },
+  /** intensità per evento [min, max] (il temporale è sempre al massimo) */
+  strength: [0.65, 1],
+  /** rampa di entrata/uscita: la densità sale/scende a scatti in rampSteps gradini */
+  rampMs: 3500,
+  rampSteps: 5,
+
+  // ---- precipitazioni (pool unico di immagini, tetto fisso)
+  maxPrecip: 120,
+  /** nuovi fiocchi/gocce al massimo per frame */
+  spawnPerFrame: 3,
+  /** y di partenza (sotto il tubo dell'HUD) */
+  spawnY: 20,
+  snowMax: 70,
+  snowSpeed: [0.35, 0.7],
+  /** ogni quanto un fiocco fa uno scatto laterale di 1px */
+  snowSwayMs: [180, 420],
+  /** quota del vento che inclina la neve */
+  snowDriftMult: 0.6,
+  /** fiocco posato su Tony: quanto resta [min, max] e ultimi ms in cui si scioglie */
+  stickMs: [2500, 5000],
+  meltMs: 700,
+  meltBlinkMs: 90,
+  maxStuck: 28,
+  /** strato di neve a terra (y = ROOM_INNER.bottom): fiocchi per alzare 1px, altezza max */
+  groundHitsPerPx: 1,
+  groundMaxPx: 3,
+  /** a fine neve: ogni quanto lo strato perde 1px (a caso per colonna) */
+  groundMeltStepMs: 1400,
+  groundMeltChance: 0.3,
+  /** neve sul caschetto: fiocchi in testa per livello, livelli, scioglimento */
+  capHitsPerLevel: 3,
+  capMaxLevel: 3,
+  capMeltStepMs: 2200,
+  /** neve forte (intensità >= shiverAt): Tony trema con piccoli impulsi */
+  shiverAt: 0.8,
+  shiverEveryMs: 140,
+  shiverDv: 0.18,
+
+  rainMax: 100,
+  stormRainMax: 120,
+  rainSpeed: [4, 5.5],
+  /** brezza della pioggia/neve senza vento (solo grafica, px/step) */
+  breeze: 0.35,
+  /** inclinazione: px/step orizzontali delle gocce a vento 1 */
+  precipDriftPerWind: 2.6,
+  /** schizzi sopra le parti di Tony colpite (tetto per frame) */
+  splashParticles: 2,
+  maxSplashesPerFrame: 4,
+  /** probabilità che una goccia a terra faccia uno schizzo */
+  groundSplashChance: 0.2,
+  /** pozzanghere: quante, larghezza massima, scatti di crescita e asciugatura */
+  puddles: [4, 6],
+  puddleMaxW: [10, 26],
+  puddleGrowMs: [600, 1500],
+  puddleDryMs: [500, 1100],
+
+  // ---- vento: accelerazione orizzontale sulle parti di Tony a ogni step
+  windAccel: 0.1,
+  /** le parti leggere (testa, braccia, gambe) prendono più vento del busto */
+  lightPartMult: 1.5,
+  /** spinta verso l'alto delle parti leggere a raffica piena */
+  windLift: 0.03,
+  /** oltre questa velocità nella direzione del vento non spinge più: niente urti forti */
+  windMaxVx: 3,
+  /** raffiche: valore minimo/massimo, durata di ogni raffica, gradino di variazione */
+  gustLow: 0.3,
+  gustMs: [1200, 3200],
+  gustStepMs: 140,
+  gustStep: 0.15,
+  stormWindMult: 0.8,
+  /** foglie/carta/polvere che volano */
+  debrisMax: 14,
+  /** probabilità per frame a vento 1 */
+  debrisRate: 0.35,
+  debrisSpeed: [2.2, 4],
+
+  // ---- temporale
+  lightningEveryMs: [3500, 9000],
+  /** frame di lampo bianco (due lampi ravvicinati) e della saetta */
+  flashFrames: 2,
+  secondFlashFrames: 1,
+  secondFlashDelayFrames: 4,
+  boltFrames: 7,
+  thunderDelayMs: [250, 900],
+  thunderShakePx: 2,
+  thunderShakeMs: 320,
+
+  // ---- annuncio sotto l'HUD
+  announceY: 44,
+  announceMs: 2400,
+  announceBlinkMs: 150,
+
+  // ---- audio (chunk di rumore filtrato ripetuti: fruscio "a scatti" chiptune)
+  rainChunkMs: 120,
+  rainVol: 0.05,
+  windChunkMs: 230,
+  windVol: 0.07,
+
+  // ---- al chiuso (mondo 2): gocce dal soffitto e correnti d'aria
+  dripEveryMs: [900, 2600],
+  /** tempo in cui la goccia si forma attaccata al soffitto */
+  dripHangMs: 500,
+  dripGravity: 0.18,
+  dripMaxSpeed: 6,
+  dripPuddleMaxW: 6,
+  draftEveryMs: [9000, 22000],
+  draftMs: [2500, 5000],
+  /** forza della corrente in unità di vento (0..1) */
+  draftStrength: 0.3,
+  /** forzato da debug: gocciolio intenso per quanto, e a che ritmo */
+  dripBurstMs: 20000,
+  dripBurstEveryMs: [150, 450],
+} as const;
