@@ -578,13 +578,28 @@ export const CRASH = {
   bonusPerLevel: 10,
   /** durata di un "frame" dell'animazione: tutto si muove a scatti di pixel interi */
   frameMs: 60,
-  /** entrata: velocità iniziale, accelerazione per frame e massima (px/frame) */
-  enterSpeed: 1,
-  enterAccel: 0.4,
-  enterMaxSpeed: 5,
-  /** scossone all'impatto */
-  shakePx: 4,
-  shakeMs: 450,
+  /**
+   * entrata in prospettiva lungo la strada (vedi entities/siteLayout.ts):
+   * l'auto parte a profondità enterZ (appena sotto il bordo basso) e avanza in z
+   * a velocità costante nel mondo (zSpeed, z/s); da zAccelFrom accelera di
+   * zAccel z/s² fino a zSpeedMax. A CRASH_LEAVE_Z smette di sterzare e tira
+   * dritto verso l'albero, frenando (velocità x skidSpeedMult). ~2,8 s in tutto.
+   */
+  enterZ: 0.95,
+  zSpeed: 1.2,
+  zAccelFrom: 3.1,
+  zAccel: 1.6,
+  zSpeedMax: 1.9,
+  skidSpeedMult: 0.8,
+  /** spostamento dal centro strada, in frazioni della larghezza (+ = a destra) */
+  lane: 0.15,
+  /** larghezza a schermo desiderata dell'auto = carWidthK / z (sceglie la taglia pre-disegnata) */
+  carWidthK: 30,
+  /** entro ±backViewDeg dalla verticale l'auto si vede da dietro, oltre di 3/4 */
+  backViewDeg: 14,
+  /** scossone all'impatto (leggero: l'incidente è lontano) */
+  shakePx: 2,
+  shakeMs: 350,
   /** dopo l'impatto: fumo dal cofano, frecce e clacson incantato */
   smokeMs: 2600,
   smokeEveryMs: 180,
