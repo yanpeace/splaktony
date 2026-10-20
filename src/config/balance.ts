@@ -502,17 +502,16 @@ export const MENU = {
 
 // ---- CANTIERE: sfondo ----
 
-/** Contratto di layout dello sfondo (strada di sabbia, zona dell'albero). */
+/**
+ * Sfondo del cantiere della galleria (entities/Room.ts). La geometria
+ * (strada, galleria, albero) sta in entities/siteLayout.ts: qui solo i
+ * margini della zona da tenere libera attorno all'albero dell'incidente.
+ */
 export const SITE = {
-  /** strada di sabbia orizzontale: y roadTop..roadBottom, tutta la larghezza */
-  roadTop: 168,
-  roadBottom: 186,
-  /** x del tronco dell'albero (poggia su roadTop) */
-  treeX: 90,
-  /** zona riservata all'albero: niente oggetti qui (solo cielo e sfondo lontano) */
-  treeZone: { left: 70, right: 110, top: 110, bottom: 170 },
-  /** linea dell'orizzonte (fine del cielo, inizio dello sterrato dietro la strada) */
-  horizon: 160,
+  /** zona libera da oggetti attorno alla base dell'albero (px da TREE.x / TREE.y) */
+  treeClear: { side: 12, above: 23, below: 5 },
+  /** distanza minima degli oggetti dal bordo della strada (px a schermo) */
+  roadClear: 3,
 } as const;
 
 // ---- CANTIERE: animazioni ----

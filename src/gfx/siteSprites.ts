@@ -1,16 +1,22 @@
 import Phaser from 'phaser';
 import { makeSprites, type SpriteData } from './pixelSprite';
+import { measureText } from './pixelFont';
+import { roadAtY, scaleAtY, TUNNEL } from '../entities/siteLayout';
 
 /**
- * Sprite del cantiere (sfondo di gioco e menu), sempre come array di stringhe
- * con indici palette Sweetie 16 ('.' = vuoto):
+ * Sprite del cantiere della galleria (sfondo di gioco e menu), sempre come
+ * array di stringhe con indici palette Sweetie 16 ('.' = vuoto):
  *   0 black 1 plum 2 red 3 orange 4 yellow 5 lime 6 green 7 teal
  *   8 navy 9 blue a sky b cyan c white d silver e slate f charcoal
  *
- * Gli oggetti piccoli sono disegnati a mano; i tile di terreno, il cielo e le
- * forme più grandi sono generati qui sotto con un piccolo "foglio a quadretti"
- * (Grid) e un generatore pseudo-casuale con seme fisso: il risultato è sempre
- * lo stesso array di stringhe, cambia solo il modo di scriverlo.
+ * Le forme grandi (montagna, portale, piana con la strada a curve) sono
+ * generate qui sotto con un "foglio a quadretti" (Grid) e un generatore
+ * pseudo-casuale con seme fisso: il risultato è sempre lo stesso array di
+ * stringhe. La piana è calcolata riga per riga dalla geometria condivisa
+ * (entities/siteLayout.ts), quindi la strada combacia con auto e polvere.
+ *
+ * Gli oggetti del cantiere hanno 2-3 taglie (L vicino, M medio, S lontano)
+ * da scegliere con scaleAtY(y).
  */
 
 // ------------------------------------------------------------ utility
@@ -83,6 +89,40 @@ class Grid {
   }
 }
 
+// ------------------------------------------------------------ layout dello sfondo (coordinate schermo)
+
+/** Prima riga della texture della montagna (sopra c'è solo cielo). */
+export const MOUNTAIN_Y0 = 44;
+/** Prima riga della texture della piana (strada + terreno, fino al bordo basso). */
+export const PLAIN_Y0 = 146;
+/** Portale della galleria: angolo in alto a sinistra della texture. */
+export const PORTAL_X0 = TUNNEL.x - 32;
+export const PORTAL_Y0 = TUNNEL.y - 46;
+/** Lampade gialle ai lati del portale (statiche, 3x3, angolo in alto a sinistra). */
+export const TUNNEL_LAMPS: readonly { x: number; y: number }[] = [
+  { x: TUNNEL.x - 20, y: TUNNEL.y - 17 },
+  { x: TUNNEL.x + 17, y: TUNNEL.y - 17 },
+];
+/** Cartello "GALLERIA" sopra il portale: centro x, riga alta del testo. */
+export const TUNNEL_SIGN = { x: TUNNEL.x, y: TUNNEL.y - 43, text: 'GALLERIA' } as const;
+/** Bordo superiore del terreno di gioco (linea netta). */
+const GROUND_Y = 291;
+
+/** Piede della montagna alla colonna x: sopra c'è la montagna, sotto la piana. */
+function mountainFootY(x: number): number {
+  if (Math.abs(x - TUNNEL.x) < 40) return TUNNEL.y - 1; // fondo dello scavo, a filo del portale
+  return Math.round(149 + 1.5 * Math.sin(x * 0.23) + Math.sin(x * 0.61 + 1));
+}
+
+/** Mezza larghezza dello scavo attorno al portale alla riga y (0 = fuori). */
+const CUT_TOP = 100;
+function cutHalfWidth(y: number): number {
+  if (y < CUT_TOP) return 0;
+  // a gradoni: ogni 9 px la parete scavata si allarga
+  const bench = Math.floor((y - CUT_TOP) / 9);
+  return 15 + bench * 5 + Math.min(3, (y - CUT_TOP) % 9);
+}
+
 // ------------------------------------------------------------ cielo
 
 /** Striscia verticale 8x160 ripetuta in orizzontale: blu → azzurro → ciano a retino. */
@@ -90,10 +130,10 @@ function sky(): SpriteData {
   const g = new Grid(8, 160);
   const bands: [number, string][] = [
     [0, '9'],
-    [48, 'a'],
-    [104, 'b'],
+    [52, 'a'],
+    [100, 'b'],
   ];
-  const ramp = 10; // altezza del retino tra due bande
+  const ramp = 12; // altezza del retino tra due bande
   for (let y = 0; y < g.h; y++) {
     for (let x = 0; x < g.w; x++) {
       let c = bands[0][1];
@@ -121,144 +161,314 @@ function cloud(w: number, h: number, blobs: [number, number, number][]): SpriteD
       if (inside && y < h - 1) g.set(x, y, y >= h - 3 ? 'd' : 'c');
     }
   }
-  // fondo piatto
   for (let x = 0; x < w; x++) if (g.get(x, h - 2) !== '.') g.set(x, h - 1, 'd');
   return g.rows();
 }
 
-/** Città lontana 64x24 ripetibile: sagome argento con finestrine ciano. */
-function skyline(): SpriteData {
-  const g = new Grid(64, 24, true);
-  const r = rng(7);
-  // fila dietro (più alta, argento)
-  let x = 0;
-  while (x < 64) {
-    const w = 6 + Math.floor(r() * 7);
-    const h = 9 + Math.floor(r() * 13);
-    g.rect(x, 24 - h, w - 1, h, 'd');
-    // finestrine
-    for (let wy = 24 - h + 2; wy < 22; wy += 3) {
-      for (let wx = x + 1; wx < x + w - 2; wx += 2) if (r() < 0.45) g.set(wx, wy, 'b');
-    }
-    if (r() < 0.35) g.rect(x + Math.floor(w / 2) - 1, 24 - h - 2, 1, 2, 'd'); // antenna
-    x += w + (r() < 0.3 ? 2 : 0);
+// ------------------------------------------------------------ montagna
+
+/**
+ * Montagna 180 x (156 - MOUNTAIN_Y0): cresta lontana argento, massiccio di
+ * roccia ardesia con il fianco sinistro illuminato, prati e abeti sulle
+ * pendici basse e, al centro, lo scavo a gradoni attorno al portale.
+ */
+function mountain(): SpriteData {
+  const W = 180;
+  const H = 156 - MOUNTAIN_Y0;
+  const g = new Grid(W, H);
+  const r = rng(71);
+  const Y = (y: number) => y - MOUNTAIN_Y0; // da coordinate schermo a griglia
+
+  // profili (coordinate schermo)
+  const farTop = (x: number) => 78 + 9 * Math.sin(x * 0.04 + 0.6) + 3 * Math.sin(x * 0.13 + 2);
+  let walk = 0;
+  const jag: number[] = [];
+  for (let x = 0; x < W; x++) {
+    walk = Math.max(-2, Math.min(2, walk + (r() - 0.5) * 1.6));
+    jag.push(walk);
   }
-  // fila davanti, bassa, ardesia chiara a retino
-  x = 3;
-  while (x < 64) {
-    const w = 5 + Math.floor(r() * 6);
-    const h = 4 + Math.floor(r() * 5);
-    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) g.set(x + i, 24 - h + j, (i + j) % 2 ? 'd' : 'e');
-    x += w + 4 + Math.floor(r() * 8);
+  const mainTop = (x: number) =>
+    61 + 0.0042 * (x - 92) ** 2 + 3 * Math.sin(x * 0.19) + 1.5 * Math.sin(x * 0.47 + 2) + jag[x];
+  const grassTop = (x: number) => 104 + 6 * Math.sin(x * 0.08 + 1.3) + 3 * Math.sin(x * 0.27);
+
+  for (let x = 0; x < W; x++) {
+    const ft = Math.round(farTop(x));
+    const mt = Math.round(mainTop(x));
+    const slope = mainTop(Math.min(W - 1, x + 2)) - mainTop(Math.max(0, x - 2)); // < 0: sale verso destra → lit
+    const gt = grassTop(x);
+    const foot = mountainFootY(x);
+    for (let sy = Math.min(ft, mt); sy <= 155; sy++) {
+      let c: string;
+      if (sy < mt) {
+        // cresta lontana: argento con ombre ardesia, foschia
+        c = sy === ft ? 'c' : (x + sy) % 5 === 0 || bayer(x, sy) < (sy - ft) / 30 ? 'e' : 'd';
+      } else {
+        const depth = sy - mt;
+        if (depth === 0) c = slope < 0 ? 'd' : 'e';
+        else if (slope < -0.6 && depth < 4) c = bayer(x, sy) < 0.6 ? 'd' : 'e';
+        else if (slope > 0.6 && depth < 6) c = bayer(x, sy) < 0.55 ? 'f' : 'e';
+        else c = bayer(x, sy) < 0.2 ? 'f' : 'e';
+        // crepacci diagonali
+        if ((x * 2 + sy * 3 + Math.floor(jag[x] * 3)) % 23 === 0 && depth > 2) c = 'f';
+        // prato sulle pendici basse (bordo frastagliato a retino)
+        const gd = sy - gt;
+        if (gd > 0 || (gd > -3 && bayer(x, sy) < (gd + 3) / 3)) {
+          c = gd < 2 ? '6' : bayer(x, sy) < 0.25 ? '6' : '7';
+          if (sy > 140) c = bayer(x, sy) < 0.5 ? '7' : 'f';
+        }
+      }
+      if (sy >= foot + 1) c = 'f'; // sotto il piede: coperto dalla piana
+      g.set(x, Y(sy), c);
+    }
+  }
+
+  // abeti sulle pendici erbose (piccoli: sono lontani)
+  for (let i = 0; i < 26; i++) {
+    const x = Math.floor(r() * W);
+    if (Math.abs(x - TUNNEL.x) < 46) continue;
+    const base = Math.round(grassTop(x)) + 4 + Math.floor(r() * 30);
+    if (base > mountainFootY(x) - 2) continue;
+    const h = 3 + Math.floor(r() * 3);
+    for (let j = 0; j < h; j++) {
+      const half = Math.floor((j * 2) / h + 0.3);
+      for (let k = -half; k <= half; k++) g.set(x + k, Y(base - h + j), k < 0 ? '6' : '7');
+    }
+    g.set(x, Y(base), '0');
+  }
+
+  // scavo a gradoni attorno al portale: terra fresca prugna/rossa, gradoni argento
+  for (let sy = CUT_TOP; sy <= 155; sy++) {
+    const hw = cutHalfWidth(sy);
+    const benchRow = (sy - CUT_TOP) % 9 === 0;
+    for (let x = TUNNEL.x - hw; x <= TUNNEL.x + hw; x++) {
+      const edge = x === TUNNEL.x - hw || x === TUNNEL.x + hw;
+      let c: string;
+      if (edge) c = '0';
+      else if (benchRow) c = sy === CUT_TOP ? '0' : 'd';
+      else if ((sy - CUT_TOP) % 9 === 1) c = 'f'; // ombra sotto il gradone
+      else {
+        c = bayer(x, sy) < 0.3 ? '2' : '1';
+        if ((x * 7 + sy * 3) % 17 === 0) c = 'e'; // sassi
+        if (x > TUNNEL.x + hw - 3) c = 'f'; // fianco destro in ombra
+      }
+      g.set(x, Y(sy), c);
+    }
   }
   return g.rows();
 }
 
-// ------------------------------------------------------------ edificio in costruzione
+// ------------------------------------------------------------ portale della galleria
 
-/** Scheletro di un palazzo 58x106: pilastri e solai grigi, impalcatura a sinistra. */
-function building(): SpriteData {
-  const g = new Grid(58, 106);
-  const cols = [9, 25, 41, 54];
-  const slabs = [30, 56, 82, 103];
-  const tops = [6, 14, 30, 30]; // dove finiscono i pilastri (ultimo piano non finito)
+/** Dentro un arco a ferro di cavallo (superellisse) di base (cx, by), mezza larghezza rx, altezza ry. */
+function inArch(x: number, y: number, cx: number, by: number, rx: number, ry: number): boolean {
+  if (y > by) return false;
+  const u = Math.abs(x + 0.5 - cx) / rx;
+  const v = Math.abs(by + 0.5 - y) / ry;
+  return u ** 2.6 + v ** 2.6 <= 1;
+}
 
-  // controventi a X in due campate
-  const brace = (x0: number, y0: number, x1: number, y1: number) => {
-    g.line(x0, y0, x1, y1, 'e');
-    g.line(x1, y0, x0, y1, 'e');
-  };
-  brace(28, 59, 41, 82);
-  brace(44, 33, 54, 56);
+/**
+ * Portale 64x47 (angolo in PORTAL_X0, PORTAL_Y0): muro di testa in cemento,
+ * anello ad arco, bocca nera con centine, muri d'ala, impalcatura a destra,
+ * cartello sopra e due lampade gialle ai lati.
+ */
+function portal(): SpriteData {
+  const W = 64;
+  const H = 47;
+  const g = new Grid(W, H);
+  const ox = PORTAL_X0;
+  const oy = PORTAL_Y0;
+  const set = (x: number, y: number, c: string) => g.set(x - ox, y - oy, c);
+  const rect = (x: number, y: number, w: number, h: number, c: string) => g.rect(x - ox, y - oy, w, h, c);
+  const cx = TUNNEL.x;
+  const by = TUNNEL.y;
+  const rx = TUNNEL.w / 2;
+  const ry = TUNNEL.h;
 
-  // tamponamento in mattoni (solo in basso a sinistra, a metà)
-  for (let y = 90; y < 103; y++) {
-    for (let x = 12; x < 25; x++) {
-      const course = Math.floor((y - 90) / 3);
-      const row = (y - 90) % 3;
-      const joint = (x + (course % 2) * 2) % 5 === 0;
-      const top = y === 90 && (x % 4 === 1 || x % 7 === 3); // bordo superiore frastagliato
-      if (top) continue;
-      g.set(x, y, row === 2 || joint ? '1' : row === 0 ? '3' : '2');
+  // muri d'ala (triangoli inclinati verso il basso, ai lati del muro di testa)
+  for (let y = by - 20; y <= by; y++) {
+    const t = (y - (by - 20)) / 20;
+    const reach = Math.round(8 * t);
+    for (let k = 1; k <= reach; k++) {
+      set(cx - 21 - k, y, k === reach ? 'd' : 'e');
+      set(cx + 20 + k, y, k === reach ? 'e' : 'f');
     }
   }
-
-  // pilastri (3 px: luce, corpo, ombra)
-  cols.forEach((cx, i) => {
-    for (let y = tops[i]; y < 106; y++) {
-      g.set(cx, y, 'd');
-      g.set(cx + 1, y, 'e');
-      g.set(cx + 2, y, 'f');
+  // muro di testa
+  const topY = by - 30;
+  for (let y = topY; y <= by; y++) {
+    for (let x = cx - 21; x <= cx + 20; x++) {
+      let c = (x + y * 3) % 11 === 0 ? 'f' : 'e';
+      if (y === topY) c = 'c';
+      else if (y === topY + 1) c = 'd';
+      else if (y === topY + 2) c = 'f';
+      if (x === cx - 21) c = 'd';
+      if (x === cx + 20) c = 'f';
+      set(x, y, c);
     }
-  });
-  // solai
-  slabs.forEach((sy) => {
-    g.rect(7, sy, 51, 1, 'd');
-    g.rect(7, sy + 1, 51, 1, 'e');
-    g.rect(7, sy + 2, 51, 1, 'f');
-  });
-  // impalcatura: due montanti sottili e tavole di legno ai piani
-  for (let y = 20; y < 106; y++) {
-    g.set(1, y, 'd');
-    g.set(5, y, 'd');
   }
-  for (let y = 22; y + 24 <= 106; y += 26) g.line(1, y + 24, 5, y + 2, 'e');
-  [28, 54, 80].forEach((py) => {
-    g.rect(0, py, 8, 1, '4');
-    g.rect(0, py + 1, 8, 1, '3');
-  });
+  // giunti dei getti (casseri) orizzontali
+  for (const jy of [topY + 10, topY + 20]) {
+    for (let x = cx - 20; x <= cx + 19; x++) if (x % 3 !== 0) set(x, jy, 'f');
+  }
+  // anello ad arco (3 px), conci chiari
+  for (let y = by - ry - 4; y <= by; y++) {
+    for (let x = cx - rx - 4; x <= cx + rx + 4; x++) {
+      if (!inArch(x, y, cx, by, rx + 3, ry + 3) || inArch(x, y, cx, by, rx, ry)) continue;
+      const left = x < cx;
+      let c = left ? 'c' : 'd';
+      if (inArch(x, y, cx, by, rx + 1, ry + 1)) c = left ? 'd' : 'e'; // spigolo interno
+      if ((Math.round(Math.atan2(by - y, x + 0.5 - cx) * 7) & 1) === 0 && !inArch(x, y, cx, by, rx + 2, ry + 2))
+        c = left ? 'd' : 'e';
+      set(x, y, c);
+    }
+  }
+  // bocca: nero in fondo, centine d'acciaio visibili vicino all'ingresso
+  for (let y = by - ry; y <= by; y++) {
+    for (let x = cx - rx; x <= cx + rx; x++) {
+      if (!inArch(x, y, cx, by, rx, ry)) continue;
+      let c = '0';
+      if (!inArch(x, y, cx, by, rx - 1, ry - 1)) c = 'f';
+      else if (inArch(x, y, cx, by, rx - 3, ry - 3) && !inArch(x, y, cx, by, rx - 4, ry - 4)) c = 'e';
+      else if (inArch(x, y, cx, by, rx - 6, ry - 6) && !inArch(x, y, cx, by, rx - 7, ry - 7)) c = 'f';
+      set(x, y, c);
+    }
+  }
+  // fondo stradale che entra nella galleria, in ombra, e luci di lavoro in fondo
+  for (let x = cx - 5; x <= cx + 5; x++) {
+    set(x, by, x % 2 ? '1' : '3');
+    if (Math.abs(x - cx) < 4) set(x, by - 1, '1');
+  }
+  set(cx - 3, by - 9, '4');
+  set(cx + 2, by - 9, '3');
 
-  g.outline('0');
+  // impalcatura sul fianco destro: montanti, traversi e tavole
+  for (const px of [cx + 22, cx + 28]) {
+    for (let y = by - 26; y <= by; y++) set(px, y, 'd');
+  }
+  for (const py of [by - 24, by - 14, by - 4]) {
+    rect(cx + 20, py, 11, 1, '4');
+    rect(cx + 20, py + 1, 11, 1, '3');
+  }
+  for (let i = 0; i < 2; i++) {
+    const y0 = by - 22 + i * 10;
+    for (let k = 0; k <= 8; k++) set(cx + 22 + Math.round(k * 0.75), y0 + k, 'e');
+  }
 
-  // ferri d'armatura sopra i pilastri non finiti (dopo il contorno: 1 px)
-  cols.forEach((cx, i) => {
-    const t = tops[i];
-    if (i === 3) return;
-    g.set(cx, t - 2, 'f');
-    g.set(cx, t - 3, 'f');
-    g.set(cx + 2, t - 2, 'f');
-    g.set(cx + 2, t - 4, 'f');
-  });
+  // cartello sopra il portale (il testo è un pixelText a parte)
+  const tw = measureText(TUNNEL_SIGN.text) + 5;
+  const sx = cx - Math.floor(tw / 2);
+  const sy = TUNNEL_SIGN.y - 2;
+  for (const px of [cx - 14, cx + 13]) rect(px, sy + 12, 1, topY - sy - 12, 'f');
+  rect(sx, sy, tw, 12, '0');
+  rect(sx + 1, sy + 1, tw - 2, 10, 'c');
+  rect(sx + 1, sy + 10, tw - 2, 1, 'd');
+
+  // lampade gialle ai lati della bocca (statiche) su una staffa
+  for (const l of TUNNEL_LAMPS) {
+    rect(l.x, l.y, 3, 1, '0');
+    set(l.x + 1, l.y + 1, '4');
+    set(l.x, l.y + 1, '3');
+    set(l.x + 2, l.y + 1, '3');
+    set(l.x + 1, l.y + 2, 'c');
+    rect(l.x, l.y + 3, 3, 1, '0');
+  }
   return g.rows();
 }
 
-// ------------------------------------------------------------ recinzione e cartello
+// ------------------------------------------------------------ piana: terreno + strada a curve
 
-/** Rete da cantiere arancione 16x18 con paletto ogni 16 px (ripetibile). */
-function fence(): SpriteData {
-  const g = new Grid(16, 18);
-  for (let y = 0; y < 18; y++) {
-    for (let x = 0; x < 16; x++) {
-      if (x <= 2) {
-        // paletto metallico
-        g.set(x, y, x === 0 || x === 2 ? '0' : y === 0 ? 'd' : 'e');
+/**
+ * Piana 180 x (320 - PLAIN_Y0), disegnata riga per riga: sterrato del cantiere
+ * (prugna in lontananza → carbone davanti) con sassi che crescono con la
+ * vicinanza, strada di sabbia larga roadAtY(y).w con bordi scuri, solchi delle
+ * ruote a ±w/4 e granelli; da GROUND_Y in giù la ghiaia compatta del terreno
+ * di gioco con la strada battuta che arriva al bordo basso.
+ */
+function plain(): SpriteData {
+  const W = 180;
+  const H = 320 - PLAIN_Y0;
+  const g = new Grid(W, H);
+  const r = rng(29);
+  for (let y = PLAIN_Y0; y < 320; y++) {
+    const gy = y - PLAIN_Y0;
+    const s = scaleAtY(Math.max(TUNNEL.y, y));
+    const t = (y - PLAIN_Y0) / (GROUND_Y - PLAIN_Y0);
+    const hasRoad = y >= TUNNEL.y;
+    const p = roadAtY(y);
+    const L = Math.round(p.x - p.w / 2);
+    const R = Math.round(p.x + p.w / 2);
+    const edge = Math.max(1, Math.round(3 * s));
+    const shoulder = Math.max(1, Math.round(4 * s));
+    const rutW = Math.max(1, Math.round(4 * s));
+    const ruts = p.w > 15 ? [p.x - p.w * 0.25, p.x + p.w * 0.25] : [];
+    const ground = y >= GROUND_Y;
+    for (let x = 0; x < W; x++) {
+      if (y < mountainFootY(x)) continue;
+      let c: string;
+      const onRoad = hasRoad && x >= L && x <= R;
+      if (ground) {
+        // terreno di gioco: bordo netto, ghiaia compatta più scura in basso
+        const k = (y - GROUND_Y) / (319 - GROUND_Y);
+        if (y === GROUND_Y) c = onRoad ? '2' : '0';
+        else if (y === GROUND_Y + 1) c = onRoad ? '4' : 'd';
+        else if (onRoad) {
+          c = x - L < edge || R - x < edge ? '3' : k * 0.8 > bayer(x, y) ? '3' : '4';
+          if (r() < 0.04) c = '2';
+        } else {
+          c = k * 0.9 > bayer(x, y) ? 'f' : 'e';
+          if (y > GROUND_Y + 1 && r() < 0.015) c = '4';
+        }
+        g.set(x, gy, c);
         continue;
       }
-      if (y === 1 || y === 15) g.set(x, y, '3'); // corde di tensione
-      else if (y > 1 && y < 15 && ((x + y) % 4 === 0 || (x - y + 64) % 4 === 0)) g.set(x, y, y > 10 ? '2' : '3');
+      if (onRoad) {
+        const dl = x - L;
+        const dr = R - x;
+        c = '4';
+        if (Math.min(dl, dr) === 0) c = '2';
+        else if (Math.min(dl, dr) < edge) c = '3';
+        else if (ruts.some((rx) => Math.abs(x + 0.5 - rx) <= rutW / 2)) c = r() < 0.85 ? '3' : '2';
+        else if (r() < 0.07) c = '3';
+        else if (r() < 0.012 + 0.02 * s) c = 'c';
+        if (y < TUNNEL.y + 3) c = c === '4' ? '3' : '1'; // ombra della galleria
+      } else {
+        // sterrato: prugna lontano, carbone vicino, a retino
+        c = Math.min(1, t * 1.15) > bayer(x, y) ? 'f' : '1';
+        if (r() < 0.03 * (1 - t)) c = '2';
+        // sabbia schizzata fuori dalla strada (spalla)
+        if (hasRoad && ((x < L && L - x <= shoulder) || (x > R && x - R <= shoulder))) {
+          c = r() < 0.55 ? '3' : '2';
+          if (Math.abs(x - (x < L ? L : R)) === shoulder) c = r() < 0.5 ? '2' : c;
+        }
+      }
+      g.set(x, gy, c);
     }
   }
-  return g.rows();
-}
-
-/** Pannello "LAVORI IN CORSO" 56x46: tabella bianca bordata di rosso su due pali. */
-function sign(): SpriteData {
-  const g = new Grid(56, 46);
-  // pali
-  for (const px of [11, 42]) {
-    g.rect(px, 22, 1, 24, 'e');
-    g.rect(px + 1, 22, 1, 24, 'f');
+  // sassi sullo sterrato: più grandi e più radi davanti, minuscoli in fondo
+  for (let i = 0; i < 90; i++) {
+    const y = PLAIN_Y0 + 8 + Math.floor(r() * (GROUND_Y - PLAIN_Y0 - 12));
+    const x = Math.floor(r() * W);
+    const p = roadAtY(y);
+    const s = scaleAtY(y);
+    const size = s > 0.6 ? 3 : s > 0.32 ? 2 : 1;
+    if (Math.abs(x - p.x) < p.w / 2 + size + 3) continue;
+    const gy = y - PLAIN_Y0;
+    if (g.get(x, gy) === '.') continue;
+    if (size === 1) {
+      g.set(x, gy, 'e');
+      continue;
+    }
+    g.rect(x, gy - size + 1, size, size - 1, 'e');
+    g.rect(x, gy - size + 1, size - 1, 1, 'd');
+    g.rect(x, gy, size, 1, '0');
   }
-  g.rect(1, 1, 54, 22, '2');
-  g.rect(2, 2, 52, 20, 'c');
-  g.rect(2, 21, 52, 1, 'd'); // ombra interna in basso
-  g.outline('0');
   return g.rows();
 }
 
-// ------------------------------------------------------------ oggetti del cantiere
+// ------------------------------------------------------------ oggetti del cantiere (in 2-3 taglie)
 
-const CONE: SpriteData = [
+const CONE_L: SpriteData = [
   '....0....',
   '...030...',
   '...030...',
@@ -271,19 +481,142 @@ const CONE: SpriteData = [
   '0ffffffe0',
   '000000000',
 ];
-
-const SANDBAG: SpriteData = [
-  '.000000.',
-  '0dcddcd0',
-  '0ddddde0',
-  '0eddeee0',
-  '.000000.',
+const CONE_M: SpriteData = [
+  '...0...',
+  '..030..',
+  '..0c0..',
+  '.03320.',
+  '.0ccd0.',
+  '.03320.',
+  '0000000',
+  '0ffffe0',
+  '0000000',
 ];
+const CONE_S: SpriteData = ['..0..', '.030.', '.0c0.', '03320', '00000'];
 
-function sandbags(): SpriteData {
-  const g = new Grid(24, 10);
-  [0, 8, 16].forEach((x) => g.blit(SANDBAG, x, 5));
-  [4, 12].forEach((x) => g.blit(SANDBAG, x, 1));
+/** Transenna w x h a strisce bianche e rosse su due cavalletti. */
+function barrier(w: number, h: number): SpriteData {
+  const g = new Grid(w, h);
+  const ph = Math.max(2, Math.round(h * 0.4)); // altezza della tavola
+  const stripe = Math.max(2, Math.round(w / 7));
+  for (const lx of [Math.round(w * 0.14), w - 1 - Math.round(w * 0.18)]) {
+    g.line(lx, ph, lx - Math.max(1, Math.round(h * 0.15)), h - 1, 'e');
+    g.line(lx + 1, ph, lx + 1 + Math.max(1, Math.round(h * 0.2)), h - 1, 'f');
+  }
+  for (let y = 1; y <= ph; y++) {
+    for (let x = 1; x < w - 1; x++) g.set(x, y, Math.floor((x + y) / stripe) % 2 ? '2' : 'c');
+  }
+  if (ph > 2) g.rect(1, ph, w - 2, 1, '1');
+  g.outline('0');
+  return g.rows();
+}
+
+/** Cumulo di terra w x h: prugna, lato sinistro rosso illuminato, sassi. */
+function mound(w: number, h: number, seed: number): SpriteData {
+  const g = new Grid(w, h);
+  const r = rng(seed);
+  const cx = w / 2;
+  const rx = w / 2 - 1;
+  const ry = h - 1.5;
+  for (let y = 0; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const u = (x + 0.5 - cx) / rx;
+      const v = (h - 1 - (y + 0.5)) / ry;
+      if (u * u + v * v > 1 + (r() - 0.5) * 0.15) continue;
+      const lit = -u * 0.8 + v * 0.6;
+      let c = lit > 0.45 ? '2' : lit < -0.35 ? 'f' : '1';
+      if (r() < 0.06) c = 'e';
+      g.set(x, y, c);
+    }
+  }
+  g.outline('0');
+  return g.rows();
+}
+
+/** Tubi di cemento impilati visti di testa (3 sotto, 2 sopra), raggio rr. */
+function pipes(rr: number): SpriteData {
+  const d = Math.round(rr * 2);
+  const w = d * 3 + 2;
+  const h = Math.round(d * 1.85) + 2;
+  const g = new Grid(w, h);
+  const centers: [number, number][] = [
+    [1 + rr, h - 1 - rr],
+    [1 + rr + d, h - 1 - rr],
+    [1 + rr + d * 2, h - 1 - rr],
+    [1 + rr + d / 2, h - 1 - rr - d * 0.85],
+    [1 + rr + d * 1.5, h - 1 - rr - d * 0.85],
+  ];
+  for (const [cx, cy] of centers) {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const dx = x + 0.5 - cx;
+        const dy = y + 0.5 - cy;
+        const dist = Math.hypot(dx, dy);
+        if (dist > rr - 0.1) continue;
+        let c: string;
+        if (dist < rr * 0.5) c = dist < rr * 0.5 - 1 ? '0' : 'f';
+        else c = dx + dy < -rr * 0.5 ? 'c' : dx + dy > rr * 0.6 ? 'e' : 'd';
+        g.set(x, y, c);
+      }
+    }
+  }
+  g.outline('0');
+  return g.rows();
+}
+
+/** Baracca di cantiere w x h: pareti bianche, fascia blu, finestra, porta, tetto scuro. */
+function cabin(w: number, h: number): SpriteData {
+  const g = new Grid(w, h);
+  const roof = Math.max(1, Math.round(h * 0.12));
+  const feet = Math.max(1, Math.round(h * 0.1));
+  const wallB = h - 1 - feet - 1;
+  g.rect(1, 1, w - 2, roof, 'e');
+  g.rect(1, 1 + roof, w - 2, wallB - roof, 'c');
+  g.rect(w - 2 - Math.max(1, Math.round(w * 0.08)), 1 + roof, Math.max(1, Math.round(w * 0.08)), wallB - roof, 'd');
+  const band = Math.max(1, Math.round(h * 0.1));
+  g.rect(1, wallB - band, w - 2, band, '9');
+  // finestra
+  const ww = Math.max(2, Math.round(w * 0.3));
+  const wh = Math.max(1, Math.round(h * 0.28));
+  const wx = Math.round(w * 0.14);
+  const wy = 1 + roof + Math.max(1, Math.round(h * 0.12));
+  g.rect(wx, wy, ww, wh, 'a');
+  if (ww > 3 && wh > 2) {
+    g.set(wx, wy, 'b');
+    g.rect(wx + Math.floor(ww / 2), wy, 1, wh, 'f');
+  }
+  // porta
+  const dw = Math.max(2, Math.round(w * 0.16));
+  const dx = Math.round(w * 0.62);
+  g.rect(dx, wy - 1, dw, wallB - wy + 1, 'e');
+  if (h > 12) g.set(dx + dw - 2, Math.round((wy + wallB) / 2), '4');
+  // piedini
+  for (const fx of [2, w - 4]) g.rect(fx, wallB, 2, feet, 'f');
+  g.outline('0');
+  return g.rows();
+}
+
+/** Escavatore lontano 26x16: giallo, braccio alzato, cingoli scuri. */
+function excavator(): SpriteData {
+  const g = new Grid(26, 16);
+  // cingoli
+  g.rect(8, 12, 16, 3, 'f');
+  for (let x = 10; x < 23; x += 3) g.set(x, 13, 'e');
+  // corpo e cabina
+  g.rect(9, 8, 15, 4, '4');
+  g.rect(9, 11, 15, 1, '3');
+  g.rect(17, 3, 6, 5, '4');
+  g.rect(18, 4, 4, 3, 'a');
+  g.set(18, 4, 'b');
+  g.rect(22, 3, 1, 9, '3');
+  // braccio: dal corpo in alto a sinistra, avambraccio giù, benna
+  g.line(11, 8, 6, 1, '4');
+  g.line(12, 8, 7, 1, '3');
+  g.line(6, 1, 2, 8, '4');
+  g.line(7, 2, 3, 9, '3');
+  g.rect(1, 9, 3, 3, 'f');
+  g.set(0, 11, 'e');
+  g.outline('0');
   return g.rows();
 }
 
@@ -299,7 +632,7 @@ function bricks(): SpriteData {
       g.set(x, y, row === 2 || joint ? '1' : row === 0 ? '3' : '2');
     }
   }
-  g.rect(0, 9, 16, 1, '3'); // bancale
+  g.rect(0, 9, 16, 1, '3');
   g.rect(1, 10, 2, 1, '1');
   g.rect(7, 10, 2, 1, '1');
   g.rect(13, 10, 2, 1, '1');
@@ -307,163 +640,17 @@ function bricks(): SpriteData {
   return g.rows();
 }
 
-/** Betoniera 28x24: tamburo arancio inclinato, telaio grigio, due ruote. */
-function mixer(): SpriteData {
-  const g = new Grid(28, 24);
-  const cx = 13;
-  const cy = 9;
-  const rx = 10;
-  const ry = 7.5;
-  // telaio e motore (dietro al tamburo)
-  g.line(7, 14, 4, 21, 'e');
-  g.line(19, 14, 22, 21, 'e');
-  g.rect(18, 12, 7, 6, 'f');
-  g.rect(18, 12, 7, 1, 'e');
-  g.rect(24, 15, 3, 1, 'e'); // manico
-  // tamburo
-  for (let y = 0; y < 24; y++) {
-    for (let x = 0; x < 28; x++) {
-      const u = (x + 0.5 - cx) / rx;
-      const v = (y + 0.5 - cy) / ry;
-      if (u * u + v * v > 1) continue;
-      const lit = u + v;
-      let c = lit > 0.7 ? '2' : lit < -0.9 ? '4' : '3';
-      // due fasce diagonali
-      const k = x - cx - (y - cy) * 0.6;
-      if (Math.abs(k + 4) < 0.8 || Math.abs(k - 4) < 0.8) c = lit > 0.7 ? '1' : '2';
-      g.set(x, y, c);
-    }
+/** Pannello "LAVORI IN CORSO" 56x40: tabella bianca bordata di rosso su due pali. */
+function sign(): SpriteData {
+  const g = new Grid(56, 40);
+  for (const px of [11, 42]) {
+    g.rect(px, 22, 1, 18, 'e');
+    g.rect(px + 1, 22, 1, 18, 'f');
   }
-  // bocca del tamburo in alto a sinistra
-  for (let y = 0; y < 6; y++) {
-    for (let x = 1; x < 10; x++) {
-      const u = (x + 0.5 - 5.5) / 3.6;
-      const v = (y + 0.5 - 3) / 2.2;
-      const d = u * u + v * v;
-      if (d <= 0.45) g.set(x, y, 'f');
-      else if (d <= 1) g.set(x, y, 'e');
-    }
-  }
+  g.rect(1, 1, 54, 22, '2');
+  g.rect(2, 2, 52, 20, 'c');
+  g.rect(2, 21, 52, 1, 'd');
   g.outline('0');
-  // ruote (sopra il contorno, con il proprio bordo)
-  for (const wx of [6, 20]) {
-    for (let y = 18; y < 24; y++) {
-      for (let x = wx - 3; x <= wx + 3; x++) {
-        const d = (x - wx) ** 2 + (y - 20.5) ** 2;
-        if (d <= 3.2) g.set(x, y, d < 1 ? 'd' : 'f');
-        else if (d <= 8.5) g.set(x, y, '0');
-      }
-    }
-  }
-  return g.rows();
-}
-
-/** Transenna bassa 26x13 a strisce bianche e rosse su due cavalletti. */
-function barrier(): SpriteData {
-  const g = new Grid(26, 13);
-  for (const lx of [3, 21]) {
-    g.line(lx, 5, lx - 2, 12, 'e');
-    g.line(lx + 1, 5, lx + 3, 12, 'f');
-  }
-  for (let y = 1; y < 6; y++) {
-    for (let x = 1; x < 25; x++) g.set(x, y, Math.floor((x + y) / 4) % 2 ? '2' : 'c');
-  }
-  g.rect(1, 5, 24, 1, '1');
-  g.outline('0');
-  return g.rows();
-}
-
-// ------------------------------------------------------------ terreni
-
-/** Sterrato stretto tra l'orizzonte e la strada, 32x8 ripetibile. */
-function backDirt(): SpriteData {
-  const g = new Grid(32, 8);
-  const r = rng(11);
-  for (let y = 0; y < 8; y++) {
-    for (let x = 0; x < 32; x++) {
-      let c = y === 0 ? 'e' : (y + x) % 2 && y < 3 ? 'e' : 'f';
-      if (r() < 0.1) c = '1';
-      g.set(x, y, c);
-    }
-  }
-  return g.rows();
-}
-
-/** Strada di sabbia 32x18: solchi delle ruote, granelli, bordi irregolari. */
-function road(): SpriteData {
-  const g = new Grid(32, 18);
-  const r = rng(23);
-  const ruts = [4, 5, 12, 13];
-  for (let y = 0; y < 18; y++) {
-    for (let x = 0; x < 32; x++) {
-      let c = '4';
-      if (y === 0) c = r() < 0.7 ? '3' : '.';
-      else if (y === 1) c = r() < 0.3 ? '3' : '4';
-      else if (y === 16) c = r() < 0.35 ? '3' : '4';
-      else if (y === 17) c = r() < 0.55 ? '3' : r() < 0.5 ? '2' : '.';
-      else if (ruts.includes(y)) {
-        // solchi: riga alta più scura, riga bassa illuminata a tratti
-        const lower = y === 5 || y === 13;
-        c = lower ? (r() < 0.6 ? '3' : '4') : r() < 0.85 ? '3' : '2';
-        if (!lower && r() < 0.08) c = '2';
-      } else if (r() < 0.09) c = '3';
-      else if (r() < 0.03) c = 'c';
-      g.set(x, y, c);
-    }
-  }
-  return g.rows();
-}
-
-/** Terra sotto la strada 32x106: argilla scura che sfuma in carbone, sassolini. */
-function dirt(): SpriteData {
-  const H = 106;
-  const g = new Grid(32, H);
-  const r = rng(41);
-  for (let y = 0; y < H; y++) {
-    const t = y / (H - 1);
-    for (let x = 0; x < 32; x++) {
-      // 1 (prugna) in alto → f (carbone) in basso, a retino
-      let c = Math.min(1, t * 1.35) > bayer(x, y) ? 'f' : '1';
-      if (y < 3) c = (x + y) % 3 === 0 ? '2' : '1'; // terra smossa al bordo strada
-      if (r() < 0.025 * (1 - t)) c = '2';
-      if (r() < 0.04 * t) c = '0';
-      g.set(x, y, c);
-    }
-  }
-  // sassolini: luce in alto, ombra sotto
-  for (let i = 0; i < 14; i++) {
-    const x = Math.floor(r() * 32);
-    const y = 4 + Math.floor(r() * (H - 10));
-    const w = r() < 0.5 ? 2 : 1;
-    g.rect(x, y, w, 1, 'e');
-    g.set(x, y - 1, 'd');
-    g.rect(x, y + 1, w, 1, '0');
-  }
-  g.rect(0, H - 1, 32, 1, '0'); // linea netta sopra il terreno di gioco
-  return g.rows();
-}
-
-/** Ghiaia compatta del terreno di gioco 32x28: bordo chiaro netto, più scura in basso. */
-function ground(): SpriteData {
-  const g = new Grid(32, 28);
-  const r = rng(53);
-  for (let y = 0; y < 28; y++) {
-    const t = y / 27;
-    for (let x = 0; x < 32; x++) {
-      let c: string;
-      if (y === 0) c = 'd';
-      else if (y === 1) c = r() < 0.3 ? 'd' : 'e';
-      else c = t * 0.9 > bayer(x, y) ? 'f' : 'e';
-      if (y > 1 && r() < 0.015) c = '4'; // granelli di sabbia
-      g.set(x, y, c);
-    }
-  }
-  for (let i = 0; i < 12; i++) {
-    const x = Math.floor(r() * 32);
-    const y = 3 + Math.floor(r() * 23);
-    g.rect(x, y, 2, 1, 'd');
-    g.rect(x, y + 1, 2, 1, '0');
-  }
   return g.rows();
 }
 
@@ -480,7 +667,6 @@ function pole(): SpriteData {
     g.set(5, y, 'f');
     g.set(6, y, '0');
   }
-  // giunto
   g.rect(0, 12, 8, 1, '0');
   g.rect(0, 16, 8, 1, '0');
   g.rect(0, 13, 1, 3, '0');
@@ -517,19 +703,25 @@ export const SITE_SPRITES: Record<string, SpriteData> = {
     [5, 4.5, 3.5],
     [10, 3.5, 4],
   ]),
-  'site-skyline': skyline(),
-  'site-building': building(),
-  'site-fence': fence(),
-  'site-sign': sign(),
-  'site-cone': CONE,
-  'site-sandbags': sandbags(),
+  'site-mountain': mountain(),
+  'site-portal': portal(),
+  'site-plain': plain(),
+  'site-cone-l': CONE_L,
+  'site-cone-m': CONE_M,
+  'site-cone-s': CONE_S,
+  'site-barrier-l': barrier(26, 13),
+  'site-barrier-m': barrier(16, 8),
+  'site-barrier-s': barrier(10, 5),
+  'site-mound-l': mound(36, 13, 3),
+  'site-mound-m': mound(24, 9, 5),
+  'site-mound-s': mound(14, 5, 9),
+  'site-pipes-l': pipes(4.5),
+  'site-pipes-m': pipes(3),
+  'site-cabin-m': cabin(34, 20),
+  'site-cabin-s': cabin(18, 10),
+  'site-excavator': excavator(),
   'site-bricks': bricks(),
-  'site-mixer': mixer(),
-  'site-barrier': barrier(),
-  'site-backdirt': backDirt(),
-  'site-road': road(),
-  'site-dirt': dirt(),
-  'site-ground': ground(),
+  'site-sign': sign(),
   'site-pole': pole(),
   'site-pipe': pipe(),
 };
