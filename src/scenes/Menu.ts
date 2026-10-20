@@ -15,12 +15,12 @@ import type { GameData, WorldId } from './Game';
  * Menu iniziale: titolo "SPLAK TONY" a lettere che saltano e cambiano colore
  * a scatti, Tony seduto su un'altalena che oscilla con rotazione quantizzata,
  * pulsanti GIOCA (→ Game, prova fullscreen + verticale), scelta del mondo
- * (MONDO 1 / MONDO 2, il 2 si sblocca a WORLDS.unlockLevel) e IMPOSTAZIONI.
- * GIOCA col mondo 2 scelto: Game parte nel mondo 1 con l'intro (l'auto entra
- * nella galleria e porta al mondo 2).
+ * (MONDO 1 / 2 / 3, il 2 si sblocca a WORLDS.unlockLevel, il 3 a
+ * WORLDS.unlockLevel3) e IMPOSTAZIONI. GIOCA col mondo 2 o 3 scelto: Game parte
+ * nel mondo 1 con l'intro (l'auto entra nella galleria e porta al mondo scelto).
  */
 
-/** lucchetto 7x8 per il mondo bloccato */
+/** lucchetto 7x8 per i mondi bloccati */
 const LOCK: SpriteData = [
   '..000..',
   '.0ddd0.',
@@ -277,25 +277,24 @@ export class Menu extends Phaser.Scene {
     });
   }
 
-  /** MONDO 1 / MONDO 2 affiancati sotto GIOCA; quello scelto è arancione. */
+  /** MONDO 1 / 2 / 3 affiancati sotto GIOCA (3 x 52 px + 2 spazi = 160); quello scelto è arancione. */
   private buildWorldButtons(cx: number, y: number): void {
     const w = 52;
     const h = 15;
-    const unlocked = isWorld2Unlocked();
+    const gap = 2;
+    const ids = [1, 2, 3] as const;
+    const x0 = cx - Math.floor((ids.length * w + (ids.length - 1) * gap) / 2);
     const buttons = new Map<WorldId, ArcadeButton>();
     const refresh = () => {
       const sel = selectedWorld();
-      for (const [id, b] of buttons) {
-        const locked = id === 2 && !unlocked;
-        b.setFill(locked ? C.charcoal : id === sel ? C.orange : C.slate);
-      }
+      for (const [id, b] of buttons) b.setFill(!isWorldUnlocked(id) ? C.charcoal : id === sel ? C.orange : C.slate);
     };
-    for (const id of [1, 2] as const) {
-      const locked = id === 2 && !unlocked;
+    ids.forEach((id, k) => {
+      const locked = !isWorldUnlocked(id);
       const parts: Phaser.GameObjects.GameObject[] = [];
       if (locked) {
-        // lucchetto + "LV 5"
-        const lv = pixelText(this, 0, 0, `LV ${WORLDS.unlockLevel}`, C.silver);
+        // lucchetto + "LV n"
+        const lv = pixelText(this, 0, 0, `LV ${unlockLevelOf(id)}`, C.silver);
         const total = 7 + 2 + lv.width;
         const x0 = -Math.floor(total / 2);
         parts.push(this.add.image(x0, -4, makeSprite(this, 'ui-lock', LOCK)).setOrigin(0));
@@ -304,7 +303,7 @@ export class Menu extends Phaser.Scene {
         const t = pixelText(this, 0, 0, `MONDO ${id}`, C.white);
         parts.push(t.setPosition(-Math.floor(t.width / 2), -4));
       }
-      const b = new ArcadeButton(this, id === 1 ? cx - w - 2 : cx + 2, y, {
+      const b = new ArcadeButton(this, x0 + k * (w + gap), y, {
         w,
         h,
         content: this.add.container(0, 0, parts),
@@ -319,7 +318,7 @@ export class Menu extends Phaser.Scene {
         },
       });
       buttons.set(id, b);
-    }
+    });
     refresh();
   }
 
@@ -327,19 +326,28 @@ export class Menu extends Phaser.Scene {
     unlockAudio();
     goFullscreenPortrait();
     this.scene.stop('Settings');
-    // mondo 2: si parte nel cantiere e l'auto ci porta dentro la galleria
-    const data: GameData = selectedWorld() === 2 ? { world: 1, intro: true } : { world: 1 };
+    // mondo 2 / 3: si parte nel cantiere e l'auto ci porta dentro la galleria
+    const sel = selectedWorld();
+    const data: GameData = sel === 1 ? { world: 1 } : { world: 1, intro: true, introTo: sel };
     this.scene.start('Game', data);
   }
 }
 
-function isWorld2Unlocked(): boolean {
-  return getLevel() >= WORLDS.unlockLevel;
+/** livello giocatore che sblocca un mondo (il 1 è sempre aperto) */
+function unlockLevelOf(id: WorldId): number {
+  return id === 3 ? WORLDS.unlockLevel3 : id === 2 ? WORLDS.unlockLevel : 0;
 }
 
-/** mondo scelto (salvato); il 2 vale solo se sbloccato */
+function isWorldUnlocked(id: WorldId): boolean {
+  return getLevel() >= unlockLevelOf(id);
+}
+
+/** mondo scelto (salvato); se è bloccato vale il più alto sbloccato sotto di lui */
 function selectedWorld(): WorldId {
-  return getSave().world === 2 && isWorld2Unlocked() ? 2 : 1;
+  const w = getSave().world;
+  if (w === 3 && isWorldUnlocked(3)) return 3;
+  if (w >= 2 && isWorldUnlocked(2)) return 2;
+  return 1;
 }
 
 /** Schermo intero + verticale (se supportati, errori ignorati). */
